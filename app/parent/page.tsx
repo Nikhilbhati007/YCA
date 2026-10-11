@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
+import PaymentModal from "@/components/PaymentModal";
+import ReceiptModal from "@/components/ReceiptModal";
+import { FeeRecord } from "@/lib/types";
 import {
   MOCK_PLAYERS,
   MOCK_FEES,
@@ -21,6 +24,7 @@ import {
   Sparkles,
   ArrowRight,
   TrendingUp,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function ParentDashboard() {
@@ -34,22 +38,117 @@ export default function ParentDashboard() {
   const presentCount = attendanceList.filter((c) => c === "P").length;
   const pct = Math.round((presentCount / attendanceList.length) * 100);
 
-  // Fees for current player
-  const playerFees = MOCK_FEES.filter((f) => f.playerId === currentPlayer.id);
-  const latestFee = playerFees[0] || {
-    id: "f-fallback",
+  // Fees ledger state
+  const [feesList, setFeesList] = useState<FeeRecord[]>(MOCK_FEES);
+
+  // Current student fees
+  const playerFees = feesList.filter((f) => f.playerId === currentPlayer.id);
+  const octoberFee = playerFees.find((f) => f.monthYear.includes("October")) || {
+    id: `f-oct-${currentPlayer.id}`,
+    playerId: currentPlayer.id,
     monthYear: "October 2026",
     amount: 2500,
     dueDate: "2026-10-05",
     status: "paid" as const,
     paymentMode: "UPI" as const,
+    transactionRef: "UPI-42890128912",
     receiptNo: "RCP-2026-1042",
+    paidAt: "2026-10-04",
+  };
+  const novemberFee = playerFees.find((f) => f.monthYear.includes("November")) || {
+    id: `f-nov-${currentPlayer.id}`,
+    playerId: currentPlayer.id,
+    monthYear: "November 2026",
+    amount: 2500,
+    dueDate: "2026-11-05",
+    status: "pending" as const,
   };
 
-  // State for modals
-  const [showUpiModal, setShowUpiModal] = useState(false);
-  const [showReceiptModal, setShowReceiptModal] = useState<string | null>(null);
-  const [feePaidSimulated, setFeePaidSimulated] = useState(false);
+  // State for Payment Gateway & Official Receipt Modals
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [activeReceipt, setActiveReceipt] = useState<{
+    receiptNo: string;
+    studentName: string;
+    playerCode: string;
+    batchName: string;
+    monthYear: string;
+    amount: number;
+    paymentMode: string;
+    transactionRef: string;
+    paidAt: string;
+  } | null>(null);
+
+  function openReceiptForFee(feeRecord: FeeRecord) {
+    setActiveReceipt({
+      receiptNo: feeRecord.receiptNo || "RCP-2026-1042",
+      studentName: currentPlayer.fullName,
+      playerCode: currentPlayer.playerCode,
+      batchName: currentPlayer.batchName,
+      monthYear: feeRecord.monthYear,
+      amount: feeRecord.amount,
+      paymentMode: feeRecord.paymentMode || "UPI (Verified)",
+      transactionRef: feeRecord.transactionRef || "UPI-42890128912",
+      paidAt: feeRecord.paidAt || new Date().toISOString(),
+    });
+    setShowReceiptModal(true);
+  }
+
+  function handlePaymentSuccess(details: {
+    receiptNo: string;
+    paymentId: string;
+    paidAt: string;
+    method: string;
+    amount: number;
+    monthYear: string;
+  }) {
+    setFeesList((prev) => {
+      const existingIdx = prev.findIndex(
+        (f) => f.playerId === currentPlayer.id && f.monthYear === details.monthYear
+      );
+      if (existingIdx >= 0) {
+        const copy = [...prev];
+        copy[existingIdx] = {
+          ...copy[existingIdx],
+          status: "paid",
+          paymentMode: "UPI",
+          transactionRef: details.paymentId,
+          receiptNo: details.receiptNo,
+          paidAt: details.paidAt,
+        };
+        return copy;
+      }
+      return [
+        {
+          id: `fee-paid-${Date.now()}`,
+          playerId: currentPlayer.id,
+          monthYear: details.monthYear,
+          amount: details.amount,
+          dueDate: "2026-11-05",
+          status: "paid",
+          paymentMode: "UPI",
+          transactionRef: details.paymentId,
+          receiptNo: details.receiptNo,
+          paidAt: details.paidAt,
+        },
+        ...prev,
+      ];
+    });
+
+    setShowPaymentModal(false);
+    setActiveReceipt({
+      receiptNo: details.receiptNo,
+      studentName: currentPlayer.fullName,
+      playerCode: currentPlayer.playerCode,
+      batchName: currentPlayer.batchName,
+      monthYear: details.monthYear,
+      amount: details.amount,
+      paymentMode: details.method,
+      transactionRef: details.paymentId,
+      paidAt: details.paidAt,
+    });
+    setShowReceiptModal(true);
+  }
 
   // Video analysis reviews for this player
   const playerVideos = MOCK_VIDEO_ANALYSIS.filter(
@@ -148,37 +247,90 @@ export default function ParentDashboard() {
               <CreditCard className="w-5 h-5 text-navy" />
             </div>
 
-            <div className="mt-3">
-              <p className="font-display text-3xl font-extrabold text-[#1e5a3c]">
-                October 2026: Paid ✓
-              </p>
-              <p className="text-xs text-navy/70 mt-0.5">
-                Paid ₹2,500 via UPI (Ref: {latestFee.receiptNo || "RCP-1042"})
-              </p>
-            </div>
+            {novemberFee.status === "paid" ? (
+              <>
+                <div className="mt-3">
+                  <p className="font-display text-3xl font-extrabold text-[#1e5a3c]">
+                    November 2026: Paid ✓
+                  </p>
+                  <p className="text-xs text-navy/70 mt-0.5">
+                    Paid ₹{novemberFee.amount} (Ref: {novemberFee.receiptNo || "Verified"})
+                  </p>
+                </div>
 
-            <div className="mt-4 p-3 rounded-lg bg-[#f2f5fa] border border-navy/10">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-navy/70 font-medium">November 2026 Fee:</span>
-                <span className="font-bold text-navy">₹2,500</span>
-              </div>
-              <p className="text-[11px] text-amber-700 font-semibold mt-1">Due date: 05 Nov 2026</p>
-            </div>
+                <div className="mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-emerald-900 font-bold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700" /> Account Up to Date
+                    </span>
+                    <span className="font-mono text-xs font-bold text-emerald-800">No Dues</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 mt-1 font-semibold">
+                    Next cycle: December 2026
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-3">
+                  <p className="font-display text-3xl font-extrabold text-[#1e5a3c]">
+                    October 2026: Paid ✓
+                  </p>
+                  <p className="text-xs text-navy/70 mt-0.5">
+                    Paid ₹2,500 via UPI (Ref: {octoberFee.receiptNo || "RCP-2026-1042"})
+                  </p>
+                </div>
+
+                <div className="mt-4 p-3 rounded-lg bg-[#f2f5fa] border border-navy/10">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-navy/70 font-medium">November 2026 Fee:</span>
+                    <span className="font-bold text-navy">₹{novemberFee.amount}</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 font-semibold mt-1">
+                    Due date: {novemberFee.dueDate}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="mt-4 pt-3 border-t border-navy/10 flex gap-2">
-            <button
-              onClick={() => setShowReceiptModal(latestFee.receiptNo || "RCP-2026-1042")}
-              className="flex-1 py-2 rounded-lg border border-navy/20 text-xs font-bold uppercase text-navy hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" /> Receipt
-            </button>
-            <button
-              onClick={() => setShowUpiModal(true)}
-              className="flex-1 py-2 rounded-lg bg-[#f5b700] text-navy text-xs font-bold uppercase hover:brightness-95 flex items-center justify-center gap-1.5 transition-all shadow-sm"
-            >
-              <QrCode className="w-3.5 h-3.5" /> Pay Nov
-            </button>
+            {novemberFee.status === "paid" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openReceiptForFee(novemberFee)}
+                  className="flex-1 py-2 rounded-lg bg-[#0a1a33] text-gold text-xs font-bold uppercase hover:bg-navy/90 flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Nov Receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openReceiptForFee(octoberFee)}
+                  className="px-3 py-2 rounded-lg border border-navy/20 text-xs font-bold uppercase text-navy hover:bg-slate-50 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                  title="View Previous October Receipt"
+                >
+                  Oct Receipt
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openReceiptForFee(octoberFee)}
+                  className="px-3 py-2 rounded-lg border border-navy/20 text-xs font-bold uppercase text-navy hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Oct Receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentModal(true)}
+                  className="flex-1 py-2 rounded-lg bg-[#f5b700] text-navy text-xs font-bold uppercase hover:brightness-95 flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                >
+                  <QrCode className="w-3.5 h-3.5" /> Pay Nov (₹2,500)
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -239,25 +391,66 @@ export default function ParentDashboard() {
               className="rounded-xl border-2 border-navy/15 bg-[#f2f5fa] p-5 flex flex-col justify-between"
             >
               <div>
-                {/* Simulated Video Player Box */}
-                <div className="relative aspect-video rounded-lg overflow-hidden bg-navy flex items-center justify-center group cursor-pointer shadow-inner">
-                  <div className="text-center text-white p-4">
-                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f5b700] text-navy font-bold shadow-lg transition-transform group-hover:scale-110">
-                      ▶
-                    </span>
-                    <p className="mt-2 text-xs font-semibold tracking-wider uppercase text-white/80">
-                      Bowling Action: {review.skillCategory}
-                    </p>
-                  </div>
-                  {review.bowlingSpeedKmph && (
-                    <div className="absolute top-3 right-3 bg-black/70 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-gold border border-white/20">
-                      ⚡ {review.bowlingSpeedKmph} km/h
+                {/* Real Video Player or Fallback Simulated Player */}
+                {review.videoUrl && (review.videoUrl.startsWith("http") || review.videoUrl.startsWith("blob")) ? (
+                  <div className="space-y-2">
+                    <div className="relative aspect-video rounded-lg overflow-hidden bg-black shadow-md">
+                      <video
+                        src={review.videoUrl}
+                        controls
+                        playsInline
+                        className="w-full h-full object-contain"
+                      />
+                      {review.bowlingSpeedKmph && (
+                        <div className="absolute top-3 right-3 bg-black/75 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-gold border border-white/20 pointer-events-none">
+                          ⚡ {review.bowlingSpeedKmph} km/h
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <div className="absolute bottom-2 left-3 text-[11px] text-white/70">
-                    Recorded at YCA Hingna Nets · {review.date}
+
+                    {/* Biomechanics Slow-Motion Speed Control */}
+                    <div className="flex items-center justify-between text-xs bg-navy/5 px-3 py-1.5 rounded-lg border border-navy/10">
+                      <span className="font-semibold text-navy/70 text-[11px]">Biomechanics Speed:</span>
+                      <div className="flex items-center gap-1">
+                        {[0.25, 0.5, 1.0].map((rate) => (
+                          <button
+                            key={rate}
+                            type="button"
+                            onClick={(e) => {
+                              const parentDiv = e.currentTarget.closest(".space-y-2");
+                              const videoEl = parentDiv?.querySelector("video") as HTMLVideoElement;
+                              if (videoEl) {
+                                videoEl.playbackRate = rate;
+                              }
+                            }}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-white border border-navy/20 hover:bg-[#f5b700] hover:text-navy text-navy transition-colors cursor-pointer"
+                          >
+                            {rate}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="relative aspect-video rounded-lg overflow-hidden bg-navy flex items-center justify-center group cursor-pointer shadow-inner">
+                    <div className="text-center text-white p-4">
+                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f5b700] text-navy font-bold shadow-lg transition-transform group-hover:scale-110">
+                        ▶
+                      </span>
+                      <p className="mt-2 text-xs font-semibold tracking-wider uppercase text-white/80">
+                        Bowling Action: {review.skillCategory}
+                      </p>
+                    </div>
+                    {review.bowlingSpeedKmph && (
+                      <div className="absolute top-3 right-3 bg-black/70 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-gold border border-white/20">
+                        ⚡ {review.bowlingSpeedKmph} km/h
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 left-3 text-[11px] text-white/70">
+                      Recorded at YCA Hingna Nets · {review.date}
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4">
                   <div className="flex items-center justify-between">
@@ -368,122 +561,27 @@ export default function ParentDashboard() {
         </section>
       </div>
 
-      {/* MODAL 1: UPI PAYMENT QR CODE */}
-      {showUpiModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl text-center">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-display text-2xl font-bold uppercase text-navy">
-                Pay November Fee
-              </h3>
-              <button
-                onClick={() => setShowUpiModal(false)}
-                className="text-navy/50 hover:text-navy text-xl font-bold"
-              >
-                ✕
-              </button>
-            </div>
+      {/* REAL PAYMENT GATEWAY CHECKOUT (RAZORPAY + UPI APP INTENT & QR) */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        player={currentPlayer}
+        fee={{
+          id: novemberFee.id,
+          monthYear: novemberFee.monthYear,
+          amount: novemberFee.amount,
+          dueDate: novemberFee.dueDate,
+        }}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
 
-            <div className="mt-4 p-4 rounded-xl bg-[#f2f5fa] border border-navy/15 flex flex-col items-center">
-              {/* Simulated QR Code */}
-              <div className="w-44 h-44 bg-white p-3 rounded-lg border-2 border-navy flex flex-col items-center justify-center shadow-md">
-                <QrCode className="w-32 h-32 text-navy" />
-                <span className="text-[10px] font-mono font-bold text-navy mt-1">7709705181@upi</span>
-              </div>
-
-              <p className="mt-3 font-display text-3xl font-extrabold text-navy">₹2,500.00</p>
-              <p className="text-xs text-navy/70">Yadav Cricket Academy &amp; Pace Foundation</p>
-              <p className="text-[11px] text-navy/50">Accepted on GPay, PhonePe, Paytm, BHIM</p>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              <button
-                onClick={() => {
-                  setFeePaidSimulated(true);
-                  setShowUpiModal(false);
-                }}
-                className="w-full rounded-md bg-emerald-700 py-2.5 font-display text-base font-bold uppercase tracking-wide text-white hover:bg-emerald-800 transition-colors shadow-sm"
-              >
-                I Have Completed UPI Payment
-              </button>
-              <button
-                onClick={() => setShowUpiModal(false)}
-                className="w-full py-1 text-xs text-navy/60 hover:text-navy"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: PRINTABLE RECEIPT MODAL */}
-      {showReceiptModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="font-display text-xl font-bold uppercase text-navy">
-                Fee Receipt
-              </span>
-              <button
-                onClick={() => setShowReceiptModal(null)}
-                className="text-navy/50 hover:text-navy text-xl font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 border-2 border-navy/20 p-5 rounded-lg bg-[#f2f5fa]/50 space-y-3 text-sm">
-              <div className="text-center border-b border-navy/15 pb-3">
-                <h4 className="font-display text-2xl font-bold uppercase text-navy">
-                  Yadav Cricket Academy
-                </h4>
-                <p className="text-xs text-navy/70">Pace Foundation · Hingna Road, Nagpur</p>
-                <p className="text-xs font-mono font-bold text-navy mt-1">
-                  Receipt No: {showReceiptModal}
-                </p>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-navy/60">Student:</span>
-                <span className="font-bold text-navy">{currentPlayer.fullName} ({currentPlayer.playerCode})</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-navy/60">Batch:</span>
-                <span className="font-semibold text-navy">{currentPlayer.batchName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-navy/60">Month:</span>
-                <span className="font-semibold text-navy">October 2026</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-navy/60">Payment Mode:</span>
-                <span className="font-semibold text-navy">UPI (Verified)</span>
-              </div>
-              <div className="flex justify-between border-t border-navy/15 pt-2">
-                <span className="font-bold text-navy">Total Paid:</span>
-                <span className="font-display text-2xl font-bold text-emerald-800">₹2,500.00</span>
-              </div>
-            </div>
-
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={() => {
-                  window.print();
-                }}
-                className="flex-1 rounded-md bg-[#0a1a33] py-2.5 font-display text-base font-bold uppercase tracking-wide text-gold hover:bg-[#06122a] flex items-center justify-center gap-1.5"
-              >
-                <Download className="w-4 h-4" /> Print / Save PDF
-              </button>
-              <button
-                onClick={() => setShowReceiptModal(null)}
-                className="px-4 rounded-md border border-navy/20 text-xs font-bold uppercase text-navy hover:bg-slate-50"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* OFFICIAL PRINTABLE YCA PACE RECEIPT MODAL */}
+      {activeReceipt && (
+        <ReceiptModal
+          isOpen={showReceiptModal}
+          onClose={() => setShowReceiptModal(false)}
+          receiptData={activeReceipt}
+        />
       )}
     </DashboardShell>
   );

@@ -15,6 +15,12 @@ import {
   Calendar,
   Save,
   Database,
+  UploadCloud,
+  Smartphone,
+  Film,
+  AlertCircle,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
 
@@ -33,6 +39,12 @@ export default function CoachDashboard() {
   const [bowlingSpeed, setBowlingSpeed] = useState("116.5");
   const [feedbackNotes, setFeedbackNotes] = useState("");
   const [analysisSuccessMsg, setAnalysisSuccessMsg] = useState<string | null>(null);
+
+  // Real Video Upload State (Supabase Storage)
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Match Stat Entry State
   const [matchPlayer, setMatchPlayer] = useState(MOCK_PLAYERS[0].id);
@@ -153,23 +165,86 @@ export default function CoachDashboard() {
     setTimeout(() => setSavedAttendanceMsg(null), 4000);
   }
 
+  function handleVideoFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      setUploadError("Please select a valid video format (MP4, MOV, WebM).");
+      return;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      setUploadError("File size exceeds 100MB limit.");
+      return;
+    }
+    setUploadError(null);
+    setVideoFile(file);
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    setVideoPreviewUrl(URL.createObjectURL(file));
+  }
+
+  function handleRemoveVideoFile() {
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    setVideoFile(null);
+    setVideoPreviewUrl(null);
+    setUploadError(null);
+  }
+
   async function handleSaveVideoAnalysis(e: React.FormEvent) {
     e.preventDefault();
     if (!feedbackNotes.trim()) return;
+
+    setIsUploadingVideo(true);
+    setUploadError(null);
+
+    let finalVideoUrl = videoPreviewUrl || "recorded_field_clip.mp4";
+
+    if (videoFile && isLiveDb) {
+      try {
+        const supabase = createClient();
+        const fileExt = videoFile.name.split(".").pop() || "mp4";
+        const fileName = `analysis_${selectedPlayerForAnalysis}_${Date.now()}.${fileExt}`;
+        const filePath = `clips/${fileName}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from("bowling-videos")
+          .upload(filePath, videoFile, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadErr) {
+          console.warn("Supabase storage upload notice:", uploadErr.message);
+          setUploadError(`Storage notice: ${uploadErr.message}. Ensure supabase/storage.sql is run.`);
+        } else {
+          const { data: pubData } = supabase.storage
+            .from("bowling-videos")
+            .getPublicUrl(filePath);
+          if (pubData?.publicUrl) {
+            finalVideoUrl = pubData.publicUrl;
+          }
+        }
+      } catch (err: any) {
+        console.warn("Storage upload exception:", err);
+      }
+    }
 
     const newAnalysis: VideoAnalysis = {
       id: `va-${Date.now()}`,
       playerId: selectedPlayerForAnalysis,
       coachName: "Jay Singh Yadav",
       date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      videoUrl: "#",
+      videoUrl: finalVideoUrl,
       thumbnailPlaceholderColor: "#1e5a3c",
       skillCategory,
       bowlingSpeedKmph: parseFloat(bowlingSpeed) || 110,
       feedback: feedbackNotes,
       keyPointers: [
-        "Consistent line outside off-stump",
-        "Smooth gather without dropping the elbow",
+        "Recorded & analyzed on Hingna turf pitch",
+        "Biomechanical review synced to parent portal",
       ],
     };
 
@@ -181,7 +256,7 @@ export default function CoachDashboard() {
           skill_category: skillCategory,
           measured_speed_kmph: parseFloat(bowlingSpeed) || null,
           coach_feedback: feedbackNotes,
-          video_url: "recorded_field_clip.mp4",
+          video_url: finalVideoUrl,
         });
         setAnalysisSuccessMsg("Saved to Supabase database & visible on Parent Portal!");
       } catch (err) {
@@ -194,8 +269,12 @@ export default function CoachDashboard() {
 
     setVideoAnalyses([newAnalysis, ...videoAnalyses]);
     setFeedbackNotes("");
-    setTimeout(() => setAnalysisSuccessMsg(null), 3500);
+    setVideoFile(null);
+    setVideoPreviewUrl(null);
+    setIsUploadingVideo(false);
+    setTimeout(() => setAnalysisSuccessMsg(null), 4000);
   }
+
 
   async function handleSaveMatchScore(e: React.FormEvent) {
     e.preventDefault();
@@ -487,16 +566,61 @@ export default function CoachDashboard() {
 
               <div>
                 <label className="block text-xs font-bold uppercase text-navy/70">
-                  Video Recording URL / Clip
+                  Field Video Recording (Phone Camera / Upload)
                 </label>
-                <div className="mt-1 flex gap-2">
-                  <input
-                    type="text"
-                    disabled
-                    value="video_clip_field_recording.mp4 (Ready for cloud upload)"
-                    className="w-full rounded-md border border-navy/20 px-3 py-2 bg-slate-50 text-navy/60 text-xs"
-                  />
-                </div>
+                
+                {!videoPreviewUrl ? (
+                  <div className="mt-1.5 flex flex-col items-center justify-center border-2 border-dashed border-navy/25 rounded-xl p-6 bg-[#f2f5fa] hover:bg-navy/5 transition-colors">
+                    <div className="flex items-center gap-2 text-navy mb-2">
+                      <Smartphone className="w-5 h-5 text-[#1e5a3c]" />
+                      <UploadCloud className="w-5 h-5 text-navy" />
+                    </div>
+                    <p className="text-xs font-bold text-navy">Record with Smartphone or Select Video Clip</p>
+                    <p className="text-[11px] text-navy/60 mt-0.5">MP4, MOV, WebM up to 100MB (Recorded on pitch)</p>
+                    
+                    <label className="mt-3 cursor-pointer rounded-lg bg-[#0a1a33] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-navy/90 shadow-sm flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5 text-[#f5b700]" />
+                      <span>Choose / Record Video</span>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        capture="environment"
+                        onChange={handleVideoFileSelect}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 p-3 rounded-xl border border-navy/20 bg-slate-50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#1e5a3c] flex items-center gap-1">
+                        <Film className="w-3.5 h-3.5" /> {videoFile?.name || "Selected Video"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveVideoFile}
+                        className="text-xs text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" /> Discard
+                      </button>
+                    </div>
+                    
+                    {/* Native video preview */}
+                    <video
+                      src={videoPreviewUrl}
+                      controls
+                      playsInline
+                      className="w-full max-h-56 rounded-lg bg-black object-contain shadow-inner"
+                    />
+                  </div>
+                )}
+
+                {uploadError && (
+                  <div className="mt-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-300 p-2.5 rounded-lg flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>{uploadError}</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -515,9 +639,16 @@ export default function CoachDashboard() {
 
               <button
                 type="submit"
-                className="w-full rounded-md bg-[#1e5a3c] py-3 font-display text-lg font-bold uppercase tracking-wide text-white hover:bg-[#18462f] transition-all shadow-sm"
+                disabled={isUploadingVideo}
+                className="w-full rounded-md bg-[#1e5a3c] py-3 font-display text-lg font-bold uppercase tracking-wide text-white hover:bg-[#18462f] transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Publish Video Analysis to Player Portal
+                {isUploadingVideo ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" /> Uploading Video to Supabase Storage...
+                  </span>
+                ) : (
+                  "Publish Video Analysis to Player Portal"
+                )}
               </button>
             </form>
           </div>
@@ -545,6 +676,17 @@ export default function CoachDashboard() {
                       </span>
                     )}
                   </div>
+
+                  {va.videoUrl && (va.videoUrl.startsWith("http") || va.videoUrl.startsWith("blob")) && (
+                    <div className="mt-3 overflow-hidden rounded-lg bg-black aspect-video max-h-52 flex items-center justify-center">
+                      <video
+                        src={va.videoUrl}
+                        controls
+                        playsInline
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  )}
 
                   <p className="mt-3 text-sm text-navy/80 bg-[#f2f5fa] p-3 rounded-lg border border-navy/10">
                     &ldquo;{va.feedback}&rdquo;
