@@ -1,9 +1,10 @@
 "use client";
-
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LogOut, Home, Shield, Users, Trophy } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut, Home, Shield, Users, Trophy, User } from "lucide-react";
+import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
 
 export default function DashboardShell({
   role,
@@ -13,6 +14,30 @@ export default function DashboardShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.email) {
+        setUserEmail(data.user.email);
+      }
+    });
+  }, []);
+
+  async function handleLogout() {
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Logout error:", err);
+      }
+    }
+    router.push("/login");
+  }
 
   return (
     <div className="min-h-screen bg-[#f2f5fa] text-[#0a1a33] flex flex-col font-sans">
@@ -78,6 +103,13 @@ export default function DashboardShell({
               </Link>
             </div>
 
+            {userEmail && (
+              <span className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/10 text-white/90 text-xs font-medium">
+                <User className="w-3 h-3 text-[#f5b700]" />
+                <span className="max-w-[140px] truncate">{userEmail}</span>
+              </span>
+            )}
+
             <Link
               href="/"
               title="Return to Public Website"
@@ -87,13 +119,14 @@ export default function DashboardShell({
               <span>Website</span>
             </Link>
 
-            <Link
-              href="/login"
-              className="flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:border-white hover:bg-white/10"
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/90 transition-colors hover:border-white hover:bg-white/10 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Log out</span>
-            </Link>
+            </button>
           </div>
         </div>
       </header>

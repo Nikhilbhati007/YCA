@@ -187,3 +187,33 @@ create policy "Allow read of video_analyses" on public.video_analyses for select
 drop policy if exists "Allow insert of video_analyses" on public.video_analyses;
 create policy "Allow insert of video_analyses" on public.video_analyses for insert with check (true);
 
+-- 7. Profiles (Self & Public Read)
+drop policy if exists "Allow read of profiles" on public.profiles;
+create policy "Allow read of profiles" on public.profiles for select using (true);
+
+drop policy if exists "Allow update own profile" on public.profiles;
+create policy "Allow update own profile" on public.profiles for update using (auth.uid() = id);
+
+-- 8. Automated Profile Sync on Supabase Auth Signup
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, email, full_name, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'role', 'parent')
+  )
+  on conflict (id) do update set
+    email = excluded.email,
+    full_name = coalesce(excluded.full_name, public.profiles.full_name);
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
