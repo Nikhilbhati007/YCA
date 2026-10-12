@@ -1,6 +1,6 @@
 "use client";
 
-import { Printer, Download, CheckCircle2, ShieldCheck, X } from "lucide-react";
+import { Printer, Download, CheckCircle2, ShieldCheck, X, Database } from "lucide-react";
 import { Player } from "@/lib/types";
 
 interface ReceiptModalProps {
@@ -54,8 +54,13 @@ export default function ReceiptModal({
         <div className="p-6 sm:p-8 space-y-6 print:p-0">
           {/* Academy Letterhead */}
           <div className="text-center border-b-2 border-navy/15 pb-5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#1e5a3c]/10 text-[#1e5a3c] text-[11px] font-bold uppercase tracking-wider mb-2">
-              <ShieldCheck className="w-3.5 h-3.5" /> Verified YCA Pace Transaction
+            <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#1e5a3c]/10 text-[#1e5a3c] text-[11px] font-bold uppercase tracking-wider">
+                <ShieldCheck className="w-3.5 h-3.5" /> Verified YCA Pace Transaction
+              </div>
+              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                <Database className="w-3 h-3 text-emerald-600" /> Synced to Supabase Cloud
+              </div>
             </div>
             <h2 className="font-display text-3xl font-extrabold uppercase text-[#0a1a33] tracking-wide">
               Yadav Cricket Academy

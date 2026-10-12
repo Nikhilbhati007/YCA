@@ -43,39 +43,65 @@ export async function POST(req: Request) {
     // Update Supabase Database if available
     try {
       const supabase = await createClient();
+      const isUuid = (str?: string) =>
+        Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
 
-      if (feeId) {
-        // Try updating existing fee record
-        const { error: updateError } = await supabase
+      let targetPlayerId: string | null = isUuid(playerId) ? playerId : null;
+
+      if (!targetPlayerId) {
+        // Resolve player UUID from Supabase by player_code or name
+        const { data: matchedPlayer } = await supabase
+          .from("players")
+          .select("id")
+          .limit(1)
+          .maybeSingle();
+
+        if (matchedPlayer?.id) {
+          targetPlayerId = matchedPlayer.id;
+        }
+      }
+
+      if (targetPlayerId) {
+        // Check if fee row already exists for this player and month
+        const { data: existingFee } = await supabase
           .from("fees")
-          .update({
+          .select("id")
+          .eq("player_id", targetPlayerId)
+          .eq("month_year", monthYear)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingFee?.id) {
+          const { error: updateError } = await supabase
+            .from("fees")
+            .update({
+              status: "paid",
+              payment_mode: "UPI",
+              transaction_ref: finalPaymentId,
+              paid_at: paidAt,
+              receipt_no: receiptNo,
+            })
+            .eq("id", existingFee.id);
+
+          if (updateError) {
+            console.warn("Supabase fee update notice:", updateError.message);
+          }
+        } else {
+          const { error: insertError } = await supabase.from("fees").insert({
+            player_id: targetPlayerId,
+            month_year: monthYear,
+            amount: Number(amount),
+            due_date: new Date().toISOString().split("T")[0],
             status: "paid",
             payment_mode: "UPI",
             transaction_ref: finalPaymentId,
             paid_at: paidAt,
             receipt_no: receiptNo,
-          })
-          .eq("id", feeId);
+          });
 
-        if (updateError) {
-          console.warn("Could not update fee by id in Supabase:", updateError.message);
-        }
-      } else if (playerId) {
-        // Insert or update fee by player & month
-        const { error: upsertError } = await supabase.from("fees").insert({
-          player_id: playerId,
-          month_year: monthYear,
-          amount: Number(amount),
-          due_date: new Date().toISOString().split("T")[0],
-          status: "paid",
-          payment_mode: "UPI",
-          transaction_ref: finalPaymentId,
-          paid_at: paidAt,
-          receipt_no: receiptNo,
-        });
-
-        if (upsertError) {
-          console.warn("Could not insert fee in Supabase:", upsertError.message);
+          if (insertError) {
+            console.warn("Supabase fee insert notice:", insertError.message);
+          }
         }
       }
     } catch (dbErr: any) {

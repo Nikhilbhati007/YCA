@@ -171,8 +171,14 @@ create policy "Allow update of attendance" on public.attendance for update using
 drop policy if exists "Allow read of fees" on public.fees;
 create policy "Allow read of fees" on public.fees for select using (true);
 
+drop policy if exists "Allow insert of fees" on public.fees;
+create policy "Allow insert of fees" on public.fees for insert with check (true);
+
 drop policy if exists "Allow update of fees" on public.fees;
 create policy "Allow update of fees" on public.fees for update using (true);
+
+drop policy if exists "Allow delete of fees" on public.fees;
+create policy "Allow delete of fees" on public.fees for delete using (true);
 
 -- 6. Match Performances & Video Analyses
 drop policy if exists "Allow read of match_performances" on public.match_performances;

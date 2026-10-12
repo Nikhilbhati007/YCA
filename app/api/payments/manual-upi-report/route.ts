@@ -31,30 +31,56 @@ export async function POST(req: Request) {
     // Update Supabase if available
     try {
       const supabase = await createClient();
+      const isUuid = (str?: string) =>
+        Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
 
-      if (feeId) {
-        await supabase
+      let targetPlayerId: string | null = isUuid(playerId) ? playerId : null;
+
+      if (!targetPlayerId) {
+        const { data: matchedPlayer } = await supabase
+          .from("players")
+          .select("id")
+          .limit(1)
+          .maybeSingle();
+
+        if (matchedPlayer?.id) {
+          targetPlayerId = matchedPlayer.id;
+        }
+      }
+
+      if (targetPlayerId) {
+        const { data: existingFee } = await supabase
           .from("fees")
-          .update({
+          .select("id")
+          .eq("player_id", targetPlayerId)
+          .eq("month_year", monthYear)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingFee?.id) {
+          await supabase
+            .from("fees")
+            .update({
+              status: "paid",
+              payment_mode: "UPI",
+              transaction_ref: transactionRef,
+              paid_at: paidAt,
+              receipt_no: receiptNo,
+            })
+            .eq("id", existingFee.id);
+        } else {
+          await supabase.from("fees").insert({
+            player_id: targetPlayerId,
+            month_year: monthYear,
+            amount: Number(amount),
+            due_date: new Date().toISOString().split("T")[0],
             status: "paid",
             payment_mode: "UPI",
             transaction_ref: transactionRef,
             paid_at: paidAt,
             receipt_no: receiptNo,
-          })
-          .eq("id", feeId);
-      } else if (playerId) {
-        await supabase.from("fees").insert({
-          player_id: playerId,
-          month_year: monthYear,
-          amount: Number(amount),
-          due_date: new Date().toISOString().split("T")[0],
-          status: "paid",
-          payment_mode: "UPI",
-          transaction_ref: transactionRef,
-          paid_at: paidAt,
-          receipt_no: receiptNo,
-        });
+          });
+        }
       }
     } catch (dbErr: any) {
       console.warn("Database sync warning in manual UPI route:", dbErr.message);

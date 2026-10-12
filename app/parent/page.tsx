@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import PaymentModal from "@/components/PaymentModal";
 import ReceiptModal from "@/components/ReceiptModal";
-import { FeeRecord } from "@/lib/types";
+import { Player, VideoAnalysis, Announcement, FeeRecord } from "@/lib/types";
+import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
 import {
   MOCK_PLAYERS,
   MOCK_FEES,
@@ -25,12 +26,15 @@ import {
   ArrowRight,
   TrendingUp,
   ShieldCheck,
+  Database,
 } from "lucide-react";
 
 export default function ParentDashboard() {
+  const [isLiveDb, setIsLiveDb] = useState(false);
+  const [playersList, setPlayersList] = useState<Player[]>(MOCK_PLAYERS);
   const [selectedPlayerId, setSelectedPlayerId] = useState(MOCK_PLAYERS[0].id);
   const currentPlayer =
-    MOCK_PLAYERS.find((p) => p.id === selectedPlayerId) || MOCK_PLAYERS[0];
+    playersList.find((p) => p.id === selectedPlayerId) || playersList[0] || MOCK_PLAYERS[0];
 
   // Attendance string (P: Present, A: Absent)
   const ATTENDANCE_STR = "PPPPAPPPPPPAPPPPPPPPPP";
@@ -40,6 +44,128 @@ export default function ParentDashboard() {
 
   // Fees ledger state
   const [feesList, setFeesList] = useState<FeeRecord[]>(MOCK_FEES);
+  const [videoList, setVideoList] = useState<VideoAnalysis[]>(MOCK_VIDEO_ANALYSIS);
+  const [announcementsList, setAnnouncementsList] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
+
+  // Fetch live Supabase records on mount
+  useEffect(() => {
+    const configured = isSupabaseConfigured();
+    setIsLiveDb(configured);
+    if (!configured) return;
+
+    const supabase = createClient();
+
+    async function loadSupabase() {
+      try {
+        // 1. Players
+        const { data: dbPlayers } = await supabase.from("players").select("*");
+        if (dbPlayers && dbPlayers.length > 0) {
+          const mappedPlayers: Player[] = dbPlayers.map((p: any) => ({
+            id: p.id,
+            playerCode: p.player_code,
+            fullName: p.full_name,
+            dob: p.dob || "2012-01-01",
+            age: 14,
+            gender: p.gender || "Boy",
+            batchId: p.batch_id || "batch-u14",
+            batchName: "U14",
+            parentId: p.parent_id || "parent-1",
+            parentName: "Parent",
+            parentPhone: "+91 98220 12345",
+            primaryRole: p.primary_role || "Fast Bowler",
+            bowlingStyle: p.bowling_style,
+            battingStyle: p.batting_style,
+            status: p.status || "active",
+            joiningDate: p.created_at?.split("T")[0] || "2026-10-10",
+          }));
+          setPlayersList(mappedPlayers);
+          setSelectedPlayerId(mappedPlayers[0].id);
+        }
+
+        // 2. Fees
+        const { data: dbFees } = await supabase.from("fees").select("*");
+        if (dbFees && dbFees.length > 0) {
+          const mappedFees: FeeRecord[] = dbFees.map((f: any) => ({
+            id: f.id,
+            playerId: f.player_id,
+            monthYear: f.month_year,
+            amount: Number(f.amount),
+            dueDate: f.due_date,
+            status: f.status,
+            paymentMode: f.payment_mode,
+            transactionRef: f.transaction_ref,
+            paidAt: f.paid_at,
+            receiptNo: f.receipt_no,
+          }));
+          setFeesList((prev) => {
+            const merged = [...mappedFees];
+            for (const pf of prev) {
+              if (!merged.some((m) => m.monthYear === pf.monthYear && (m.playerId === pf.playerId || m.id === pf.id))) {
+                merged.push(pf);
+              }
+            }
+            return merged;
+          });
+        }
+
+        // 3. Video Analyses
+        const { data: dbVideos } = await supabase
+          .from("video_analyses")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (dbVideos && dbVideos.length > 0) {
+          const mappedVideos: VideoAnalysis[] = dbVideos.map((v: any) => ({
+            id: v.id,
+            playerId: v.player_id,
+            coachName: "Jay Singh Yadav",
+            date: v.created_at
+              ? new Date(v.created_at).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "Today",
+            videoUrl: v.video_url,
+            thumbnailPlaceholderColor: "#1e5a3c",
+            skillCategory: v.skill_category || "Release Point",
+            bowlingSpeedKmph: v.measured_speed_kmph ? Number(v.measured_speed_kmph) : 115,
+            feedback: v.coach_feedback,
+            keyPointers: [
+              "Tracked & analyzed on Hingna turf pitch",
+              "Synced to Supabase Cloud",
+            ],
+          }));
+          setVideoList(mappedVideos);
+        }
+
+        // 4. Announcements
+        const { data: dbAnn } = await supabase
+          .from("announcements")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (dbAnn && dbAnn.length > 0) {
+          const mappedAnn: Announcement[] = dbAnn.map((a: any) => ({
+            id: a.id,
+            title: a.title,
+            content: a.body,
+            category: a.category || "Notice",
+            date: a.created_at
+              ? new Date(a.created_at).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "Today",
+          }));
+          setAnnouncementsList(mappedAnn);
+        }
+      } catch (err) {
+        console.warn("Supabase fetch notice:", err);
+      }
+    }
+
+    loadSupabase();
+  }, []);
 
   // Current student fees
   const playerFees = feesList.filter((f) => f.playerId === currentPlayer.id);
@@ -151,8 +277,11 @@ export default function ParentDashboard() {
   }
 
   // Video analysis reviews for this player
-  const playerVideos = MOCK_VIDEO_ANALYSIS.filter(
-    (v) => v.playerId === currentPlayer.id || currentPlayer.id === "p1"
+  const playerVideos = videoList.filter(
+    (v) =>
+      v.playerId === currentPlayer.id ||
+      currentPlayer.id === "p1" ||
+      currentPlayer.id === playersList[0]?.id
   );
 
   return (
@@ -167,6 +296,15 @@ export default function ParentDashboard() {
             <span className="text-xs font-mono font-bold text-navy/60">
               {currentPlayer.playerCode}
             </span>
+            {isLiveDb ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                <Database className="w-3 h-3 text-emerald-600" /> Supabase Live
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                ⚡ Demo Mode
+              </span>
+            )}
           </div>
 
           <h1 className="font-display text-4xl sm:text-5xl font-bold uppercase leading-tight text-navy mt-1">
@@ -183,7 +321,7 @@ export default function ParentDashboard() {
         {/* Child Selector if multiple siblings */}
         <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-navy/15 shadow-sm">
           <span className="text-xs font-bold uppercase text-navy/60 px-2">Switch Child:</span>
-          {MOCK_PLAYERS.slice(0, 3).map((p) => (
+          {playersList.slice(0, 3).map((p) => (
             <button
               key={p.id}
               onClick={() => setSelectedPlayerId(p.id)}
@@ -542,7 +680,7 @@ export default function ParentDashboard() {
           </div>
 
           <div className="mt-4 space-y-4">
-            {MOCK_ANNOUNCEMENTS.map((ann) => (
+            {announcementsList.map((ann) => (
               <div
                 key={ann.id}
                 className="p-3.5 rounded-lg bg-[#f2f5fa] border border-navy/10 space-y-1"
