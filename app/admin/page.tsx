@@ -79,7 +79,7 @@ export default function AdminDashboard() {
 
   function openReceiptForAdmin(player: Player, fee: FeeRecord) {
     setAdminReceiptData({
-      receiptNo: fee.receiptNo || "RCP-2026-1042",
+      receiptNo: fee.receiptNo || `RCP-${fee.id.slice(-6)}`,
       studentName: player.fullName,
       playerCode: player.playerCode,
       batchName: player.batchName,
@@ -107,42 +107,50 @@ export default function AdminDashboard() {
 
     async function loadDb() {
       try {
+        // Load Batches
+        const { data: dbBatches } = await supabase.from("batches").select("*");
+        const batchMap: Record<string, string> = {};
+        if (dbBatches && dbBatches.length > 0) {
+          const mappedB: Batch[] = dbBatches.map((b: any) => {
+            batchMap[b.id] = b.name;
+            return {
+              id: b.id,
+              name: b.name,
+              sessionTime: b.session_time,
+              timeSlot: b.time_slot,
+              playerCount: b.player_count || 0,
+              leadCoach: b.lead_coach || "Nilesh Raut",
+            };
+          });
+          setBatches(mappedB);
+        }
+
         // Load Players
         const { data: dbPlayers } = await supabase.from("players").select("*");
         if (dbPlayers && dbPlayers.length > 0) {
-          const mapped: Player[] = dbPlayers.map((p: any) => ({
-            id: p.id,
-            playerCode: p.player_code,
-            fullName: p.full_name,
-            dob: p.dob || "2012-01-01",
-            age: 14,
-            gender: p.gender || "Boy",
-            batchId: p.batch_id || "batch-u14",
-            batchName: "U14",
-            parentId: p.parent_id || "parent-1",
-            parentName: "Parent",
-            parentPhone: "+91 98220 12345",
-            primaryRole: p.primary_role || "Fast Bowler",
-            bowlingStyle: p.bowling_style,
-            battingStyle: p.batting_style,
-            status: p.status || "active",
-            joiningDate: p.created_at?.split("T")[0] || "2026-10-10",
-          }));
+          const mapped: Player[] = dbPlayers.map((p: any) => {
+            const birthYear = p.dob ? new Date(p.dob).getFullYear() : 2013;
+            const age = Math.max(5, 2026 - birthYear);
+            return {
+              id: p.id,
+              playerCode: p.player_code,
+              fullName: p.full_name,
+              dob: p.dob || "2013-01-01",
+              age,
+              gender: p.gender || "Boy",
+              batchId: p.batch_id || "batch-u14",
+              batchName: batchMap[p.batch_id] || "U14",
+              parentId: p.parent_id || undefined,
+              parentName: p.parent_name || undefined,
+              parentPhone: p.parent_phone || undefined,
+              primaryRole: p.primary_role || "Fast Bowler",
+              bowlingStyle: p.bowling_style,
+              battingStyle: p.batting_style,
+              status: p.status || "active",
+              joiningDate: p.created_at?.split("T")[0] || "2026-10-10",
+            };
+          });
           setPlayers(mapped);
-        }
-
-        // Load Batches
-        const { data: dbBatches } = await supabase.from("batches").select("*");
-        if (dbBatches && dbBatches.length > 0) {
-          const mappedB: Batch[] = dbBatches.map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            sessionTime: b.session_time,
-            timeSlot: b.time_slot,
-            playerCount: 15,
-            leadCoach: "Jay Singh Yadav",
-          }));
-          setBatches(mappedB);
         }
 
         // Load Enquiries
@@ -292,7 +300,11 @@ export default function AdminDashboard() {
   }
 
   function sendFeeReminder(player: Player, fee: FeeRecord) {
-    const text = `Namaste ${player.parentName}, gentle reminder from Yadav Cricket Academy & Pace Foundation: Monthly cricket coaching fee for ${player.fullName} (${fee.monthYear}) is due. Kindly pay via UPI to 7709705181. Thank you!`;
+    if (!player.parentPhone) {
+      triggerFeedback(`Parent phone not registered for ${player.fullName}.`);
+      return;
+    }
+    const text = `Namaste ${player.parentName || "Parent"}, gentle reminder from Yadav Cricket Academy & Pace Foundation: Monthly cricket coaching fee for ${player.fullName} (${fee.monthYear}) is due. Kindly pay via UPI to 7709705181. Thank you!`;
     const cleanPhone = player.parentPhone.replace(/[^0-9]/g, "");
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
   }
@@ -336,7 +348,7 @@ export default function AdminDashboard() {
     const matchesSearch =
       p.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.playerCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.parentPhone.includes(searchQuery);
+      (p.parentPhone && p.parentPhone.includes(searchQuery));
     const matchesBatch = selectedBatchFilter === "all" || p.batchId === selectedBatchFilter;
     return matchesSearch && matchesBatch;
   });
@@ -371,8 +383,8 @@ export default function AdminDashboard() {
                 <Database className="w-3 h-3" /> Supabase Live
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-                ⚡ Demo Store
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                Academy Roster
               </span>
             )}
           </div>
@@ -403,7 +415,7 @@ export default function AdminDashboard() {
             <Users className="h-5 w-5 text-[#0a1a33]" />
           </div>
           <p className="mt-3 font-display text-4xl font-extrabold text-navy">{players.length}</p>
-          <p className="mt-1 text-xs text-navy/60">Across 4 training batches</p>
+          <p className="mt-1 text-xs text-navy/60">Across {batches.length} training batches</p>
         </div>
 
         <div className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
@@ -411,13 +423,13 @@ export default function AdminDashboard() {
             <span className="text-xs font-bold uppercase tracking-wider">Today&apos;s Attendance</span>
             <CalendarCheck className="h-5 w-5 text-emerald-700" />
           </div>
-          <p className="mt-3 font-display text-4xl font-extrabold text-emerald-700">92%</p>
-          <p className="mt-1 text-xs text-navy/60">Morning sessions verified</p>
+          <p className="mt-3 font-display text-4xl font-extrabold text-navy">—</p>
+          <p className="mt-1 text-xs text-navy/60">Pending daily coach roster</p>
         </div>
 
         <div className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between text-navy/60">
-            <span className="text-xs font-bold uppercase tracking-wider">October Fee Pool</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Fee Collection</span>
             <CreditCard className="h-5 w-5 text-navy" />
           </div>
           <p className="mt-3 font-display text-3xl font-extrabold text-navy">
@@ -636,13 +648,17 @@ export default function AdminDashboard() {
                       <p className="text-[11px] text-navy/60">{p.bowlingStyle || p.battingStyle}</p>
                     </td>
                     <td className="py-3 px-4">
-                      <p className="font-medium text-xs">{p.parentName}</p>
-                      <a
-                        href={`tel:${p.parentPhone}`}
-                        className="text-[11px] text-[#1e5a3c] font-semibold hover:underline"
-                      >
-                        {p.parentPhone}
-                      </a>
+                      <p className="font-medium text-xs">{p.parentName || "Parent"}</p>
+                      {p.parentPhone ? (
+                        <a
+                          href={`tel:${p.parentPhone}`}
+                          className="text-[11px] text-[#1e5a3c] font-semibold hover:underline"
+                        >
+                          {p.parentPhone}
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-navy/40 italic">Pending collection</span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span
@@ -656,17 +672,21 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => {
-                          const text = `Hello ${p.parentName}, update regarding ${p.fullName} at YCA PACE Nagpur.`;
-                          const clean = p.parentPhone.replace(/[^0-9]/g, "");
-                          window.open(`https://wa.me/${clean}?text=${encodeURIComponent(text)}`, "_blank");
-                        }}
-                        className="p-1.5 rounded hover:bg-emerald-50 text-emerald-700 transition-colors inline-flex items-center gap-1 text-xs font-semibold"
-                        title="Chat with Parent on WhatsApp"
-                      >
-                        <Send className="h-3.5 w-3.5" /> WA
-                      </button>
+                      {p.parentPhone ? (
+                        <button
+                          onClick={() => {
+                            const text = `Hello ${p.parentName || "Parent"}, update regarding ${p.fullName} at YCA PACE Nagpur.`;
+                            const clean = p.parentPhone!.replace(/[^0-9]/g, "");
+                            window.open(`https://wa.me/${clean}?text=${encodeURIComponent(text)}`, "_blank");
+                          }}
+                          className="p-1.5 rounded hover:bg-emerald-50 text-emerald-700 transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                          title="Chat with Parent on WhatsApp"
+                        >
+                          <Send className="h-3.5 w-3.5" /> WA
+                        </button>
+                      ) : (
+                        <span className="text-xs text-navy/30">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -802,7 +822,9 @@ export default function AdminDashboard() {
                             </button>
                             <button
                               onClick={() => sendFeeReminder(player, fee)}
-                              className="px-2.5 py-1 rounded bg-[#f5b700] text-navy font-semibold text-xs hover:brightness-95 transition-all inline-flex items-center gap-1"
+                              disabled={!player.parentPhone}
+                              className="px-2.5 py-1 rounded bg-[#f5b700] text-navy font-semibold text-xs hover:brightness-95 transition-all inline-flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                              title={player.parentPhone ? "Send WhatsApp Fee Reminder" : "Parent phone pending collection"}
                             >
                               <Send className="w-3 h-3" /> Remind WA
                             </button>
@@ -849,52 +871,60 @@ export default function AdminDashboard() {
             </span>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            {enquiries.map((enq) => (
-              <div key={enq.id} className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-display text-2xl font-bold text-navy">{enq.playerName}</h3>
-                    <p className="text-xs text-navy/60 mt-0.5">
-                      Age: <strong className="text-navy">{enq.age} yrs</strong> · Preferred Batch:{" "}
-                      <strong className="text-navy">{enq.preferredBatch}</strong>
-                    </p>
+          {enquiries.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-navy/20 bg-white p-12 text-center text-navy/50">
+              <PhoneCall className="w-8 h-8 mx-auto text-navy/30 mb-2" />
+              <p className="font-semibold text-sm">No new trial inquiries yet</p>
+              <p className="text-xs text-navy/40 mt-1">Website booking requests submitted by prospective students will appear here in real time.</p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              {enquiries.map((enq) => (
+                <div key={enq.id} className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-display text-2xl font-bold text-navy">{enq.playerName}</h3>
+                      <p className="text-xs text-navy/60 mt-0.5">
+                        Age: <strong className="text-navy">{enq.age} yrs</strong> · Preferred Batch:{" "}
+                        <strong className="text-navy">{enq.preferredBatch}</strong>
+                      </p>
+                    </div>
+                    <select
+                      value={enq.status}
+                      onChange={(e) => handleEnquiryStatusChange(enq.id, e.target.value as any)}
+                      className="text-xs font-bold uppercase px-2.5 py-1 rounded border border-navy/20 bg-slate-50 focus:outline-none"
+                    >
+                      <option value="new">New Lead</option>
+                      <option value="contacted">Contacted</option>
+                      <option value="trial_booked">Trial Booked</option>
+                      <option value="enrolled">Enrolled</option>
+                      <option value="archived">Archived</option>
+                    </select>
                   </div>
-                  <select
-                    value={enq.status}
-                    onChange={(e) => handleEnquiryStatusChange(enq.id, e.target.value as any)}
-                    className="text-xs font-bold uppercase px-2.5 py-1 rounded border border-navy/20 bg-slate-50 focus:outline-none"
-                  >
-                    <option value="new">New Lead</option>
-                    <option value="contacted">Contacted</option>
-                    <option value="trial_booked">Trial Booked</option>
-                    <option value="enrolled">Enrolled</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </div>
 
-                {enq.notes && (
-                  <p className="mt-3 text-xs bg-[#f2f5fa] p-2.5 rounded border border-navy/10 text-navy/80">
-                    {enq.notes}
-                  </p>
-                )}
+                  {enq.notes && (
+                    <p className="mt-3 text-xs bg-[#f2f5fa] p-2.5 rounded border border-navy/10 text-navy/80">
+                      {enq.notes}
+                    </p>
+                  )}
 
-                <div className="mt-4 pt-3 border-t border-navy/10 flex items-center justify-between">
-                  <span className="text-[11px] text-navy/50">Logged on: {enq.createdAt}</span>
-                  <a
-                    href={`https://wa.me/${enq.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                      `Hello from Yadav Cricket Academy & Pace Foundation, Nagpur! Thank you for inquiring for ${enq.playerName}. When would you like to schedule the free trial session?`
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 transition-colors"
-                  >
-                    <Send className="w-3.5 h-3.5" /> WhatsApp {enq.phone}
-                  </a>
+                  <div className="mt-4 pt-3 border-t border-navy/10 flex items-center justify-between">
+                    <span className="text-[11px] text-navy/50">Logged on: {enq.createdAt}</span>
+                    <a
+                      href={`https://wa.me/${enq.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                        `Hello from Yadav Cricket Academy & Pace Foundation, Nagpur! Thank you for inquiring for ${enq.playerName}. When would you like to schedule the free trial session?`
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" /> WhatsApp {enq.phone}
+                    </a>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -963,18 +993,26 @@ export default function AdminDashboard() {
               Published Circulars ({announcements.length})
             </h2>
 
-            {announcements.map((ann) => (
-              <div key={ann.id} className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase bg-navy text-gold">
-                    {ann.category}
-                  </span>
-                  <span className="text-xs text-navy/50">{ann.date}</span>
-                </div>
-                <h3 className="mt-2 font-display text-xl font-bold text-navy">{ann.title}</h3>
-                <p className="mt-1 text-sm text-navy/75">{ann.content}</p>
+            {announcements.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-navy/20 bg-white p-12 text-center text-navy/50">
+                <AlertCircle className="w-8 h-8 mx-auto text-navy/30 mb-2" />
+                <p className="font-semibold text-sm">No announcements published yet</p>
+                <p className="text-xs text-navy/40 mt-1">Use the broadcast form on the left to notify parents and coaches of upcoming events or camps.</p>
               </div>
-            ))}
+            ) : (
+              announcements.map((ann) => (
+                <div key={ann.id} className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase bg-navy text-gold">
+                      {ann.category}
+                    </span>
+                    <span className="text-xs text-navy/50">{ann.date}</span>
+                  </div>
+                  <h3 className="mt-2 font-display text-xl font-bold text-navy">{ann.title}</h3>
+                  <p className="mt-1 text-sm text-navy/75">{ann.content}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

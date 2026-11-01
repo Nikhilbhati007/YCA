@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- YCA PACE - Supabase Storage Setup for Pace Foundation Bowling Videos
--- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/tbrcfjagvtnsnzooevop/sql/new
+-- Run this in your Supabase SQL Editor (SQL Editor -> New Query)
 -- ==============================================================================
 
 -- 1. Create or update the 'bowling-videos' public storage bucket

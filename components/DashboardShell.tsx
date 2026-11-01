@@ -16,8 +16,17 @@ export default function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [loggedUser, setLoggedUser] = useState<{ name: string; code: string; role: string } | null>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("yca_logged_user");
+      if (stored) {
+        try {
+          setLoggedUser(JSON.parse(stored));
+        } catch {}
+      }
+    }
     if (!isSupabaseConfigured()) return;
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
@@ -28,6 +37,10 @@ export default function DashboardShell({
   }, []);
 
   async function handleLogout() {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("yca_active_player");
+      localStorage.removeItem("yca_logged_user");
+    }
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -69,7 +82,7 @@ export default function DashboardShell({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Quick Portal Switcher for Demo */}
+            {/* Academy Portal Switcher */}
             <div className="hidden md:flex items-center bg-white/10 rounded-lg p-1 text-xs">
               <Link
                 href="/admin"
@@ -103,12 +116,17 @@ export default function DashboardShell({
               </Link>
             </div>
 
-            {userEmail && (
+            {loggedUser ? (
+              <span className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/10 text-white/90 text-xs font-medium">
+                <User className="w-3 h-3 text-[#f5b700]" />
+                <span className="max-w-[140px] truncate">{loggedUser.name}</span>
+              </span>
+            ) : userEmail ? (
               <span className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/10 text-white/90 text-xs font-medium">
                 <User className="w-3 h-3 text-[#f5b700]" />
                 <span className="max-w-[140px] truncate">{userEmail}</span>
               </span>
-            )}
+            ) : null}
 
             <Link
               href="/"
@@ -130,12 +148,6 @@ export default function DashboardShell({
           </div>
         </div>
       </header>
-
-      {/* Demo Notification Bar */}
-      <div className="bg-[#f5b700]/20 border-b border-[#f5b700]/30 px-5 py-1 text-center text-xs font-semibold text-[#0a1a33]/90 flex items-center justify-center gap-2">
-        <span>⚡ Interactive Academy Management Demo with Live Sample Records.</span>
-        <span className="hidden sm:inline text-[#0a1a33]/60">Switch portals using the header navigation.</span>
-      </div>
 
       {/* Main Content Area */}
       <main className="mx-auto max-w-6xl w-full px-5 py-8 flex-1">{children}</main>

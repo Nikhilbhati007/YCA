@@ -36,7 +36,7 @@ export default function CoachDashboard() {
   const [videoAnalyses, setVideoAnalyses] = useState<VideoAnalysis[]>(MOCK_VIDEO_ANALYSIS);
   const [selectedPlayerForAnalysis, setSelectedPlayerForAnalysis] = useState(MOCK_PLAYERS[0].id);
   const [skillCategory, setSkillCategory] = useState<VideoAnalysis["skillCategory"]>("Release Point");
-  const [bowlingSpeed, setBowlingSpeed] = useState("116.5");
+  const [bowlingSpeed, setBowlingSpeed] = useState("");
   const [feedbackNotes, setFeedbackNotes] = useState("");
   const [analysisSuccessMsg, setAnalysisSuccessMsg] = useState<string | null>(null);
 
@@ -48,17 +48,15 @@ export default function CoachDashboard() {
 
   // Match Stat Entry State
   const [matchPlayer, setMatchPlayer] = useState(MOCK_PLAYERS[0].id);
-  const [matchOpponent, setMatchOpponent] = useState("Hingna Colts CC");
-  const [matchBatting, setMatchBatting] = useState("38 (24)");
-  const [matchBowling, setMatchBowling] = useState("3/18 (4.0 ov)");
-  const [matchNotes, setMatchNotes] = useState("Outstanding swing bowling in the opening spell.");
+  const [matchOpponent, setMatchOpponent] = useState("");
+  const [matchBatting, setMatchBatting] = useState("");
+  const [matchBowling, setMatchBowling] = useState("");
+  const [matchNotes, setMatchNotes] = useState("");
   const [matchSuccessMsg, setMatchSuccessMsg] = useState<string | null>(null);
 
   // Attendance state
   const activeBatch = batches.find((b) => b.id === selectedBatchId) || batches[0];
-  const batchPlayers = players.filter(
-    (p) => p.batchId === selectedBatchId || selectedBatchId === batches[0]?.id
-  );
+  const batchPlayers = players.filter((p) => p.batchId === selectedBatchId);
 
   const [presentMap, setPresentMap] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(MOCK_PLAYERS.map((p) => [p.id, true]))
@@ -76,26 +74,47 @@ export default function CoachDashboard() {
 
     async function loadCoachData() {
       try {
+        const { data: dbBatches } = await supabase.from("batches").select("*");
+        const batchMap: Record<string, string> = {};
+        if (dbBatches && dbBatches.length > 0) {
+          const mappedB: Batch[] = dbBatches.map((b: any) => {
+            batchMap[b.id] = b.name;
+            return {
+              id: b.id,
+              name: b.name,
+              sessionTime: b.session_time,
+              timeSlot: b.time_slot,
+              playerCount: b.player_count || 0,
+              leadCoach: b.lead_coach || "Nilesh Raut",
+            };
+          });
+          setBatches(mappedB);
+        }
+
         const { data: dbPlayers } = await supabase.from("players").select("*");
         if (dbPlayers && dbPlayers.length > 0) {
-          const mapped: Player[] = dbPlayers.map((p: any) => ({
-            id: p.id,
-            playerCode: p.player_code,
-            fullName: p.full_name,
-            dob: p.dob || "2012-01-01",
-            age: 14,
-            gender: p.gender || "Boy",
-            batchId: p.batch_id || "batch-u14",
-            batchName: "U14",
-            parentId: p.parent_id || "parent-1",
-            parentName: "Parent",
-            parentPhone: "+91 98220 12345",
-            primaryRole: p.primary_role || "Fast Bowler",
-            bowlingStyle: p.bowling_style,
-            battingStyle: p.batting_style,
-            status: p.status || "active",
-            joiningDate: p.created_at?.split("T")[0] || "2026-10-10",
-          }));
+          const mapped: Player[] = dbPlayers.map((p: any) => {
+            const birthYear = p.dob ? new Date(p.dob).getFullYear() : 2013;
+            const age = Math.max(5, 2026 - birthYear);
+            return {
+              id: p.id,
+              playerCode: p.player_code,
+              fullName: p.full_name,
+              dob: p.dob || "2013-01-01",
+              age,
+              gender: p.gender || "Boy",
+              batchId: p.batch_id || "batch-u14",
+              batchName: batchMap[p.batch_id] || "U14",
+              parentId: p.parent_id || undefined,
+              parentName: p.parent_name || undefined,
+              parentPhone: p.parent_phone || undefined,
+              primaryRole: p.primary_role || "Fast Bowler",
+              bowlingStyle: p.bowling_style,
+              battingStyle: p.batting_style,
+              status: p.status || "active",
+              joiningDate: p.created_at?.split("T")[0] || "2026-10-10",
+            };
+          });
           setPlayers(mapped);
           setPresentMap(Object.fromEntries(mapped.map((p) => [p.id, true])));
           setSelectedPlayerForAnalysis(mapped[0]?.id || "");
@@ -316,8 +335,8 @@ export default function CoachDashboard() {
                 <Database className="w-3 h-3" /> Supabase Live
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-                ⚡ Demo Cache
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                Active Academy Roster
               </span>
             )}
           </div>
@@ -449,46 +468,52 @@ export default function CoachDashboard() {
             </div>
 
             {/* Player Attendance List */}
-            <ul className="mt-6 divide-y divide-navy/10">
-              {batchPlayers.map((p) => {
-                const isPresent = presentMap[p.id];
-                return (
-                  <li
-                    key={p.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3.5 hover:bg-slate-50 px-2 rounded-lg transition-colors"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-base text-navy">{p.fullName}</span>
-                        <span className="text-xs font-mono font-semibold text-navy/50">
-                          {p.playerCode}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-[#f2f5fa] border border-navy/10 font-semibold text-navy/70">
-                          {p.primaryRole}
-                        </span>
+            {batchPlayers.length === 0 ? (
+              <p className="py-8 text-center text-sm text-navy/50 font-medium">
+                No players currently enrolled in this batch.
+              </p>
+            ) : (
+              <ul className="mt-6 divide-y divide-navy/10">
+                {batchPlayers.map((p) => {
+                  const isPresent = presentMap[p.id];
+                  return (
+                    <li
+                      key={p.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3.5 hover:bg-slate-50 px-2 rounded-lg transition-colors"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-base text-navy">{p.fullName}</span>
+                          <span className="text-xs font-mono font-semibold text-navy/50">
+                            {p.playerCode}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-[#f2f5fa] border border-navy/10 font-semibold text-navy/70">
+                            {p.primaryRole}
+                          </span>
+                        </div>
+                        <p className="text-xs text-navy/60 mt-0.5">
+                          Age: {p.age} yrs · DOB: {p.dob} · Contact: {p.parentPhone || "Pending collection"}
+                        </p>
                       </div>
-                      <p className="text-xs text-navy/60 mt-0.5">
-                        Parent: {p.parentName} ({p.parentPhone})
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleAttendance(p.id)}
-                        className={`w-32 py-2 rounded-md font-display text-base font-bold uppercase tracking-wide transition-all ${
-                          isPresent
-                            ? "bg-[#1e5a3c] text-white hover:bg-[#18462f] shadow-sm"
-                            : "bg-[#b3202a] text-white hover:bg-[#8f1921] shadow-sm"
-                        }`}
-                      >
-                        {isPresent ? "✓ Present" : "✕ Absent"}
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleAttendance(p.id)}
+                          className={`w-32 py-2 rounded-md font-display text-base font-bold uppercase tracking-wide transition-all ${
+                            isPresent
+                              ? "bg-[#1e5a3c] text-white hover:bg-[#18462f] shadow-sm"
+                              : "bg-[#b3202a] text-white hover:bg-[#8f1921] shadow-sm"
+                          }`}
+                        >
+                          {isPresent ? "✓ Present" : "✕ Absent"}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
       )}
@@ -659,55 +684,63 @@ export default function CoachDashboard() {
               Recent Video Skill Logs
             </h3>
 
-            {videoAnalyses.map((va) => {
-              const player = players.find((p) => p.id === va.playerId) || players[0];
-              return (
-                <div key={va.id} className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-lg text-navy">{player?.fullName || "Player"}</h4>
-                      <p className="text-xs text-navy/60">
-                        {va.skillCategory} · Reviewed by {va.coachName}
-                      </p>
+            {videoAnalyses.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-navy/20 bg-white p-8 text-center text-navy/50">
+                <Video className="w-8 h-8 mx-auto text-navy/30 mb-2" />
+                <p className="font-semibold text-sm">No video skill logs recorded yet</p>
+                <p className="text-xs text-navy/40 mt-1">Submit high-speed video feedback using the form to publish biomechanical analysis for a player.</p>
+              </div>
+            ) : (
+              videoAnalyses.map((va) => {
+                const player = players.find((p) => p.id === va.playerId) || players[0];
+                return (
+                  <div key={va.id} className="rounded-xl border-2 border-navy/15 bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-lg text-navy">{player?.fullName || "Player"}</h4>
+                        <p className="text-xs text-navy/60">
+                          {va.skillCategory} · Reviewed by {va.coachName}
+                        </p>
+                      </div>
+                      {va.bowlingSpeedKmph && (
+                        <span className="font-display text-2xl font-extrabold text-[#b3202a]">
+                          {va.bowlingSpeedKmph} <span className="text-xs font-normal">km/h</span>
+                        </span>
+                      )}
                     </div>
-                    {va.bowlingSpeedKmph && (
-                      <span className="font-display text-2xl font-extrabold text-[#b3202a]">
-                        {va.bowlingSpeedKmph} <span className="text-xs font-normal">km/h</span>
-                      </span>
+
+                    {va.videoUrl && (va.videoUrl.startsWith("http") || va.videoUrl.startsWith("blob")) && (
+                      <div className="mt-3 overflow-hidden rounded-lg bg-black aspect-video max-h-52 flex items-center justify-center">
+                        <video
+                          src={va.videoUrl}
+                          controls
+                          playsInline
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
                     )}
-                  </div>
 
-                  {va.videoUrl && (va.videoUrl.startsWith("http") || va.videoUrl.startsWith("blob")) && (
-                    <div className="mt-3 overflow-hidden rounded-lg bg-black aspect-video max-h-52 flex items-center justify-center">
-                      <video
-                        src={va.videoUrl}
-                        controls
-                        playsInline
-                        className="w-full h-full object-contain"
-                      />
+                    <p className="mt-3 text-sm text-navy/80 bg-[#f2f5fa] p-3 rounded-lg border border-navy/10">
+                      &ldquo;{va.feedback}&rdquo;
+                    </p>
+
+                    <ul className="mt-3 space-y-1">
+                      {va.keyPointers.map((p, idx) => (
+                        <li key={idx} className="text-xs text-navy/70 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#1e5a3c]" />
+                          {p}
+                        </li>
+                      ))}
+                    </ul>
+
+                    <div className="mt-3 pt-3 border-t border-navy/10 flex justify-between text-[11px] text-navy/50">
+                      <span>Logged on: {va.date}</span>
+                      <span className="text-emerald-700 font-semibold">✓ Visible to Parent</span>
                     </div>
-                  )}
-
-                  <p className="mt-3 text-sm text-navy/80 bg-[#f2f5fa] p-3 rounded-lg border border-navy/10">
-                    &ldquo;{va.feedback}&rdquo;
-                  </p>
-
-                  <ul className="mt-3 space-y-1">
-                    {va.keyPointers.map((p, idx) => (
-                      <li key={idx} className="text-xs text-navy/70 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#1e5a3c]" />
-                        {p}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="mt-3 pt-3 border-t border-navy/10 flex justify-between text-[11px] text-navy/50">
-                    <span>Logged on: {va.date}</span>
-                    <span className="text-emerald-700 font-semibold">✓ Visible to Parent</span>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
       )}

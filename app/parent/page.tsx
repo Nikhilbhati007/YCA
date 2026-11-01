@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import DashboardShell from "@/components/DashboardShell";
 import PaymentModal from "@/components/PaymentModal";
 import ReceiptModal from "@/components/ReceiptModal";
@@ -36,16 +37,28 @@ export default function ParentDashboard() {
   const currentPlayer =
     playersList.find((p) => p.id === selectedPlayerId) || playersList[0] || MOCK_PLAYERS[0];
 
-  // Attendance string (P: Present, A: Absent)
-  const ATTENDANCE_STR = "PPPPAPPPPPPAPPPPPPPPPP";
-  const attendanceList = [...ATTENDANCE_STR];
-  const presentCount = attendanceList.filter((c) => c === "P").length;
-  const pct = Math.round((presentCount / attendanceList.length) * 100);
+  // Attendance records (P: Present, A: Absent)
+  const [attendanceSessions, setAttendanceSessions] = useState<string[]>([]);
+  const presentCount = attendanceSessions.filter((c) => c === "P").length;
+  const pct = attendanceSessions.length > 0 ? Math.round((presentCount / attendanceSessions.length) * 100) : 0;
 
   // Fees ledger state
   const [feesList, setFeesList] = useState<FeeRecord[]>(MOCK_FEES);
   const [videoList, setVideoList] = useState<VideoAnalysis[]>(MOCK_VIDEO_ANALYSIS);
   const [announcementsList, setAnnouncementsList] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
+
+  // Check for active logged-in student from query param or localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const queryId = params.get("playerId");
+      const storedId = localStorage.getItem("yca_active_player");
+      const targetId = queryId || storedId;
+      if (targetId && playersList.some((p) => p.id === targetId)) {
+        setSelectedPlayerId(targetId);
+      }
+    }
+  }, [playersList]);
 
   // Fetch live Supabase records on mount
   useEffect(() => {
@@ -57,29 +70,52 @@ export default function ParentDashboard() {
 
     async function loadSupabase() {
       try {
-        // 1. Players
+        // 1. Batches map
+        const { data: dbBatches } = await supabase.from("batches").select("*");
+        const batchMap: Record<string, string> = {};
+        if (dbBatches && dbBatches.length > 0) {
+          dbBatches.forEach((b: any) => {
+            batchMap[b.id] = b.name;
+          });
+        }
+
+        // 2. Players
         const { data: dbPlayers } = await supabase.from("players").select("*");
         if (dbPlayers && dbPlayers.length > 0) {
-          const mappedPlayers: Player[] = dbPlayers.map((p: any) => ({
-            id: p.id,
-            playerCode: p.player_code,
-            fullName: p.full_name,
-            dob: p.dob || "2012-01-01",
-            age: 14,
-            gender: p.gender || "Boy",
-            batchId: p.batch_id || "batch-u14",
-            batchName: "U14",
-            parentId: p.parent_id || "parent-1",
-            parentName: "Parent",
-            parentPhone: "+91 98220 12345",
-            primaryRole: p.primary_role || "Fast Bowler",
-            bowlingStyle: p.bowling_style,
-            battingStyle: p.batting_style,
-            status: p.status || "active",
-            joiningDate: p.created_at?.split("T")[0] || "2026-10-10",
-          }));
+          const mappedPlayers: Player[] = dbPlayers.map((p: any) => {
+            const birthYear = p.dob ? new Date(p.dob).getFullYear() : 2013;
+            const age = Math.max(5, 2026 - birthYear);
+            return {
+              id: p.id,
+              playerCode: p.player_code,
+              fullName: p.full_name,
+              dob: p.dob || "2013-01-01",
+              age,
+              gender: p.gender || "Boy",
+              batchId: p.batch_id || "batch-u14",
+              batchName: batchMap[p.batch_id] || "U14",
+              parentId: p.parent_id || undefined,
+              parentName: p.parent_name || undefined,
+              parentPhone: p.parent_phone || undefined,
+              primaryRole: p.primary_role || "Fast Bowler",
+              bowlingStyle: p.bowling_style,
+              battingStyle: p.batting_style,
+              status: p.status || "active",
+              joiningDate: p.created_at?.split("T")[0] || "2026-10-10",
+            };
+          });
           setPlayersList(mappedPlayers);
-          setSelectedPlayerId(mappedPlayers[0].id);
+          if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            const queryId = params.get("playerId");
+            const storedId = localStorage.getItem("yca_active_player");
+            const targetId = queryId || storedId;
+            if (targetId && mappedPlayers.some((p) => p.id === targetId)) {
+              setSelectedPlayerId(targetId);
+            } else {
+              setSelectedPlayerId(mappedPlayers[0].id);
+            }
+          }
         }
 
         // 2. Fees
@@ -169,26 +205,15 @@ export default function ParentDashboard() {
 
   // Current student fees
   const playerFees = feesList.filter((f) => f.playerId === currentPlayer.id);
-  const octoberFee = playerFees.find((f) => f.monthYear.includes("October")) || {
-    id: `f-oct-${currentPlayer.id}`,
-    playerId: currentPlayer.id,
-    monthYear: "October 2026",
-    amount: 2500,
-    dueDate: "2026-10-05",
-    status: "paid" as const,
-    paymentMode: "UPI" as const,
-    transactionRef: "UPI-42890128912",
-    receiptNo: "RCP-2026-1042",
-    paidAt: "2026-10-04",
-  };
-  const novemberFee = playerFees.find((f) => f.monthYear.includes("November")) || {
-    id: `f-nov-${currentPlayer.id}`,
+  const currentFee = playerFees[0] || {
+    id: `fee-${currentPlayer.id}-nov`,
     playerId: currentPlayer.id,
     monthYear: "November 2026",
     amount: 2500,
     dueDate: "2026-11-05",
     status: "pending" as const,
   };
+  const paidFee = playerFees.find((f) => f.status === "paid");
 
   // State for Payment Gateway & Official Receipt Modals
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -207,14 +232,14 @@ export default function ParentDashboard() {
 
   function openReceiptForFee(feeRecord: FeeRecord) {
     setActiveReceipt({
-      receiptNo: feeRecord.receiptNo || "RCP-2026-1042",
+      receiptNo: feeRecord.receiptNo || `RCP-${feeRecord.id.slice(-6)}`,
       studentName: currentPlayer.fullName,
       playerCode: currentPlayer.playerCode,
       batchName: currentPlayer.batchName,
       monthYear: feeRecord.monthYear,
       amount: feeRecord.amount,
       paymentMode: feeRecord.paymentMode || "UPI (Verified)",
-      transactionRef: feeRecord.transactionRef || "UPI-42890128912",
+      transactionRef: feeRecord.transactionRef || "UPI-VERIFIED",
       paidAt: feeRecord.paidAt || new Date().toISOString(),
     });
     setShowReceiptModal(true);
@@ -277,12 +302,7 @@ export default function ParentDashboard() {
   }
 
   // Video analysis reviews for this player
-  const playerVideos = videoList.filter(
-    (v) =>
-      v.playerId === currentPlayer.id ||
-      currentPlayer.id === "p1" ||
-      currentPlayer.id === playersList[0]?.id
-  );
+  const playerVideos = videoList.filter((v) => v.playerId === currentPlayer.id);
 
   return (
     <DashboardShell role="Parent">
@@ -301,8 +321,8 @@ export default function ParentDashboard() {
                 <Database className="w-3 h-3 text-emerald-600" /> Supabase Live
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full">
-                ⚡ Demo Mode
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                Active Academy Roster
               </span>
             )}
           </div>
@@ -318,22 +338,35 @@ export default function ParentDashboard() {
           </p>
         </div>
 
-        {/* Child Selector if multiple siblings */}
+        {/* Student Selector */}
         <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-navy/15 shadow-sm">
-          <span className="text-xs font-bold uppercase text-navy/60 px-2">Switch Child:</span>
-          {playersList.slice(0, 3).map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setSelectedPlayerId(p.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                selectedPlayerId === p.id
-                  ? "bg-[#0a1a33] text-[#f5b700] shadow-sm"
-                  : "text-navy hover:bg-slate-100"
-              }`}
-            >
-              {p.fullName.split(" ")[0]}
-            </button>
-          ))}
+          <label htmlFor="student-selector" className="text-xs font-bold uppercase text-navy/60 px-2 whitespace-nowrap">
+            Select Player:
+          </label>
+          <select
+            id="student-selector"
+            value={selectedPlayerId}
+            onChange={(e) => {
+              setSelectedPlayerId(e.target.value);
+              if (typeof window !== "undefined") {
+                localStorage.setItem("yca_active_player", e.target.value);
+                const p = playersList.find((item) => item.id === e.target.value);
+                if (p) {
+                  localStorage.setItem(
+                    "yca_logged_user",
+                    JSON.stringify({ name: p.fullName, code: p.playerCode, role: "parent" })
+                  );
+                }
+              }
+            }}
+            className="rounded-lg border border-navy/20 bg-slate-50 px-3 py-1.5 text-xs font-bold text-navy focus:outline-none focus:border-navy"
+          >
+            {playersList.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.fullName} ({p.batchName} · {p.playerCode})
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -351,27 +384,33 @@ export default function ParentDashboard() {
 
             <div className="mt-3 flex items-baseline gap-3">
               <span className="font-display text-5xl font-extrabold text-navy">{pct}%</span>
-              <span className="text-xs font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
-                {presentCount} / {attendanceList.length} Sessions
+              <span className="text-xs font-semibold text-navy/70 bg-slate-100 px-2 py-0.5 rounded">
+                {presentCount} / {attendanceSessions.length} Sessions
               </span>
             </div>
 
             {/* Attendance matrix dots */}
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {attendanceList.map((c, i) => (
-                <span
-                  key={i}
-                  title={`Session ${i + 1}: ${c === "P" ? "Present" : "Absent"}`}
-                  className={`h-5 w-5 rounded transition-transform hover:scale-125 ${
-                    c === "P" ? "bg-[#1e5a3c]" : "bg-[#b3202a]"
-                  }`}
-                />
-              ))}
-            </div>
+            {attendanceSessions.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {attendanceSessions.map((c, i) => (
+                  <span
+                    key={i}
+                    title={`Session ${i + 1}: ${c === "P" ? "Present" : "Absent"}`}
+                    className={`h-5 w-5 rounded transition-transform hover:scale-125 ${
+                      c === "P" ? "bg-[#1e5a3c]" : "bg-[#b3202a]"
+                    }`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 p-3 rounded-lg bg-[#f2f5fa] border border-dashed border-navy/20 text-xs text-navy/60">
+                0 sessions logged yet for this cycle. Daily net attendance is marked by academy coaches on ground.
+              </div>
+            )}
           </div>
 
           <p className="mt-4 pt-3 border-t border-navy/10 text-xs text-navy/60">
-            Green = Attended on ground, Red = Absent.
+            Attendance tracked live at YCA Hingna Nets.
           </p>
         </div>
 
@@ -385,14 +424,14 @@ export default function ParentDashboard() {
               <CreditCard className="w-5 h-5 text-navy" />
             </div>
 
-            {novemberFee.status === "paid" ? (
+            {currentFee.status === "paid" ? (
               <>
                 <div className="mt-3">
                   <p className="font-display text-3xl font-extrabold text-[#1e5a3c]">
-                    November 2026: Paid ✓
+                    {currentFee.monthYear}: Paid ✓
                   </p>
                   <p className="text-xs text-navy/70 mt-0.5">
-                    Paid ₹{novemberFee.amount} (Ref: {novemberFee.receiptNo || "Verified"})
+                    Paid ₹{currentFee.amount} (Ref: {currentFee.receiptNo || "Verified"})
                   </p>
                 </div>
 
@@ -404,28 +443,28 @@ export default function ParentDashboard() {
                     <span className="font-mono text-xs font-bold text-emerald-800">No Dues</span>
                   </div>
                   <p className="text-[11px] text-emerald-700 mt-1 font-semibold">
-                    Next cycle: December 2026
+                    Payment verified on academy ledger
                   </p>
                 </div>
               </>
             ) : (
               <>
                 <div className="mt-3">
-                  <p className="font-display text-3xl font-extrabold text-[#1e5a3c]">
-                    October 2026: Paid ✓
+                  <p className="font-display text-3xl font-extrabold text-amber-700">
+                    Payment Pending
                   </p>
                   <p className="text-xs text-navy/70 mt-0.5">
-                    Paid ₹2,500 via UPI (Ref: {octoberFee.receiptNo || "RCP-2026-1042"})
+                    {currentFee.monthYear} Coaching Fee: ₹{currentFee.amount}
                   </p>
                 </div>
 
                 <div className="mt-4 p-3 rounded-lg bg-[#f2f5fa] border border-navy/10">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-navy/70 font-medium">November 2026 Fee:</span>
-                    <span className="font-bold text-navy">₹{novemberFee.amount}</span>
+                    <span className="text-navy/70 font-medium">Monthly Coaching:</span>
+                    <span className="font-bold text-navy">₹{currentFee.amount}</span>
                   </div>
                   <p className="text-[11px] text-amber-700 font-semibold mt-1">
-                    Due date: {novemberFee.dueDate}
+                    Due date: {currentFee.dueDate}
                   </p>
                 </div>
               </>
@@ -433,39 +472,31 @@ export default function ParentDashboard() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-navy/10 flex gap-2">
-            {novemberFee.status === "paid" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => openReceiptForFee(novemberFee)}
-                  className="flex-1 py-2 rounded-lg bg-[#0a1a33] text-gold text-xs font-bold uppercase hover:bg-navy/90 flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" /> Nov Receipt
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openReceiptForFee(octoberFee)}
-                  className="px-3 py-2 rounded-lg border border-navy/20 text-xs font-bold uppercase text-navy hover:bg-slate-50 flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                  title="View Previous October Receipt"
-                >
-                  Oct Receipt
-                </button>
-              </>
+            {currentFee.status === "paid" ? (
+              <button
+                type="button"
+                onClick={() => openReceiptForFee(currentFee)}
+                className="flex-1 py-2 rounded-lg bg-[#0a1a33] text-gold text-xs font-bold uppercase hover:bg-navy/90 flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> Download Receipt ({currentFee.receiptNo || "YCA"})
+              </button>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => openReceiptForFee(octoberFee)}
-                  className="px-3 py-2 rounded-lg border border-navy/20 text-xs font-bold uppercase text-navy hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" /> Oct Receipt
-                </button>
+                {paidFee && (
+                  <button
+                    type="button"
+                    onClick={() => openReceiptForFee(paidFee)}
+                    className="px-3 py-2 rounded-lg border border-navy/20 text-xs font-bold uppercase text-navy hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Receipt
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(true)}
                   className="flex-1 py-2 rounded-lg bg-[#f5b700] text-navy text-xs font-bold uppercase hover:brightness-95 flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
                 >
-                  <QrCode className="w-3.5 h-3.5" /> Pay Nov (₹2,500)
+                  <QrCode className="w-3.5 h-3.5" /> Pay Now via UPI (₹{currentFee.amount})
                 </button>
               </>
             )}
@@ -486,16 +517,15 @@ export default function ParentDashboard() {
               <span className="text-xs font-bold uppercase tracking-wider text-navy/60">
                 Jay Singh Yadav · Head Coach
               </span>
-              <p className="mt-2 text-sm text-navy/85 italic bg-[#f2f5fa] p-3 rounded-lg border border-navy/10">
-                &ldquo;Aarav has shown outstanding discipline in the morning run-up. His release point
-                is consistent outside the off-stump. Working now on full length yorkers.&rdquo;
+              <p className="mt-2 text-xs text-navy/70 italic bg-[#f2f5fa] p-3 rounded-lg border border-navy/10 leading-relaxed">
+                No formal coach assessment notes logged yet for {currentPlayer.fullName}. Technical observations and drill recommendations will be published after the upcoming turf net evaluation.
               </p>
             </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-navy/10 flex items-center justify-between text-xs text-navy/60">
-            <span>Updated: 06 Oct 2026</span>
-            <span className="text-emerald-800 font-semibold">Tracked on video</span>
+            <span>Status: Pending evaluation</span>
+            <span className="text-navy/50 font-medium">Turf Nets 1-3</span>
           </div>
         </div>
       </div>
@@ -522,104 +552,122 @@ export default function ParentDashboard() {
           </span>
         </div>
 
-        <div className="mt-6 grid md:grid-cols-2 gap-6">
-          {playerVideos.map((review) => (
-            <div
-              key={review.id}
-              className="rounded-xl border-2 border-navy/15 bg-[#f2f5fa] p-5 flex flex-col justify-between"
-            >
-              <div>
-                {/* Real Video Player or Fallback Simulated Player */}
-                {review.videoUrl && (review.videoUrl.startsWith("http") || review.videoUrl.startsWith("blob")) ? (
-                  <div className="space-y-2">
-                    <div className="relative aspect-video rounded-lg overflow-hidden bg-black shadow-md">
-                      <video
-                        src={review.videoUrl}
-                        controls
-                        playsInline
-                        className="w-full h-full object-contain"
+        {playerVideos.length === 0 ? (
+          <div className="mt-6 py-12 text-center text-navy/60 bg-[#f8fafc] rounded-lg border border-dashed border-navy/20">
+            <Video className="w-8 h-8 mx-auto text-navy/40 mb-2" />
+            <p className="font-semibold text-sm">No video skill analysis recorded yet for {currentPlayer.fullName}</p>
+            <p className="text-xs text-navy/50 mt-1 max-w-md mx-auto">
+              High-speed camera recordings and biomechanical angle breakdowns will appear here once captured by coaches on turf nets.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 grid md:grid-cols-2 gap-6">
+            {playerVideos.map((review) => (
+              <div
+                key={review.id}
+                className="rounded-xl border-2 border-navy/15 bg-[#f2f5fa] p-5 flex flex-col justify-between"
+              >
+                <div>
+                  {/* Real Video Player or Fallback Simulated Player */}
+                  {review.videoUrl && (review.videoUrl.startsWith("http") || review.videoUrl.startsWith("blob")) ? (
+                    <div className="space-y-2">
+                      <div className="relative aspect-video rounded-lg overflow-hidden bg-black shadow-md">
+                        <video
+                          src={review.videoUrl}
+                          controls
+                          playsInline
+                          className="w-full h-full object-contain"
+                        />
+                        {review.bowlingSpeedKmph && (
+                          <div className="absolute top-3 right-3 bg-black/75 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-gold border border-white/20 pointer-events-none">
+                            ⚡ {review.bowlingSpeedKmph} km/h
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Biomechanics Slow-Motion Speed Control */}
+                      <div className="flex items-center justify-between text-xs bg-navy/5 px-3 py-1.5 rounded-lg border border-navy/10">
+                        <span className="font-semibold text-navy/70 text-[11px]">Biomechanics Speed:</span>
+                        <div className="flex items-center gap-1">
+                          {[0.25, 0.5, 1.0].map((rate) => (
+                            <button
+                              key={rate}
+                              type="button"
+                              onClick={(e) => {
+                                const parentDiv = e.currentTarget.closest(".space-y-2");
+                                const videoEl = parentDiv?.querySelector("video") as HTMLVideoElement;
+                                if (videoEl) {
+                                  videoEl.playbackRate = rate;
+                                }
+                              }}
+                              className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-white border border-navy/20 hover:bg-[#f5b700] hover:text-navy text-navy transition-colors cursor-pointer"
+                            >
+                              {rate}x
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative aspect-video rounded-lg overflow-hidden bg-navy flex items-center justify-center group cursor-pointer shadow-md">
+                      <Image
+                        src={review.thumbnailUrl || "/gallery/bowling.jpg"}
+                        alt={review.skillCategory}
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        sizes="(max-width: 768px) 100vw, 400px"
                       />
+                      <div className="absolute inset-0 bg-black/50 group-hover:bg-black/40 transition-colors" />
+                      <div className="relative text-center text-white p-4 z-10">
+                        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f5b700] text-navy font-bold shadow-lg transition-transform group-hover:scale-110">
+                          ▶
+                        </span>
+                        <p className="mt-2 text-xs font-semibold tracking-wider uppercase text-white/95 drop-shadow">
+                          Bowling Action: {review.skillCategory}
+                        </p>
+                      </div>
                       {review.bowlingSpeedKmph && (
-                        <div className="absolute top-3 right-3 bg-black/75 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-gold border border-white/20 pointer-events-none">
+                        <div className="absolute top-3 right-3 z-10 bg-black/75 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-gold border border-white/20">
                           ⚡ {review.bowlingSpeedKmph} km/h
                         </div>
                       )}
-                    </div>
-
-                    {/* Biomechanics Slow-Motion Speed Control */}
-                    <div className="flex items-center justify-between text-xs bg-navy/5 px-3 py-1.5 rounded-lg border border-navy/10">
-                      <span className="font-semibold text-navy/70 text-[11px]">Biomechanics Speed:</span>
-                      <div className="flex items-center gap-1">
-                        {[0.25, 0.5, 1.0].map((rate) => (
-                          <button
-                            key={rate}
-                            type="button"
-                            onClick={(e) => {
-                              const parentDiv = e.currentTarget.closest(".space-y-2");
-                              const videoEl = parentDiv?.querySelector("video") as HTMLVideoElement;
-                              if (videoEl) {
-                                videoEl.playbackRate = rate;
-                              }
-                            }}
-                            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-white border border-navy/20 hover:bg-[#f5b700] hover:text-navy text-navy transition-colors cursor-pointer"
-                          >
-                            {rate}x
-                          </button>
-                        ))}
+                      <div className="absolute bottom-2 left-3 z-10 text-[11px] text-white/90 drop-shadow">
+                        Recorded at YCA Hingna Nets · {review.date}
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="relative aspect-video rounded-lg overflow-hidden bg-navy flex items-center justify-center group cursor-pointer shadow-inner">
-                    <div className="text-center text-white p-4">
-                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f5b700] text-navy font-bold shadow-lg transition-transform group-hover:scale-110">
-                        ▶
+                  )}
+
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-display text-xl font-bold uppercase text-navy">
+                        {review.skillCategory}
+                      </h3>
+                      <span className="text-xs font-semibold text-navy/60">
+                        Coach: {review.coachName}
                       </span>
-                      <p className="mt-2 text-xs font-semibold tracking-wider uppercase text-white/80">
-                        Bowling Action: {review.skillCategory}
-                      </p>
                     </div>
-                    {review.bowlingSpeedKmph && (
-                      <div className="absolute top-3 right-3 bg-black/70 backdrop-blur px-2.5 py-1 rounded text-xs font-bold text-gold border border-white/20">
-                        ⚡ {review.bowlingSpeedKmph} km/h
-                      </div>
-                    )}
-                    <div className="absolute bottom-2 left-3 text-[11px] text-white/70">
-                      Recorded at YCA Hingna Nets · {review.date}
+
+                    <p className="mt-2 text-sm text-navy/80">{review.feedback}</p>
+
+                    <div className="mt-3 space-y-1">
+                      {review.keyPointers.map((ptr, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs text-navy/70">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                          <span>{ptr}</span>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                )}
-
-                <div className="mt-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display text-xl font-bold uppercase text-navy">
-                      {review.skillCategory}
-                    </h3>
-                    <span className="text-xs font-semibold text-navy/60">
-                      Coach: {review.coachName}
-                    </span>
-                  </div>
-
-                  <p className="mt-2 text-sm text-navy/80">{review.feedback}</p>
-
-                  <div className="mt-3 space-y-1">
-                    {review.keyPointers.map((ptr, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-xs text-navy/70">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                        <span>{ptr}</span>
-                      </div>
-                    ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-4 pt-3 border-t border-navy/10 flex justify-between items-center text-xs">
-                <span className="text-navy/60">Analyzed for {currentPlayer.fullName}</span>
-                <span className="text-[#1e5a3c] font-bold">Good Length Drill</span>
+                <div className="mt-4 pt-3 border-t border-navy/10 flex justify-between items-center text-xs">
+                  <span className="text-navy/60">Analyzed for {currentPlayer.fullName}</span>
+                  <span className="text-[#1e5a3c] font-bold">Good Length Drill</span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Match Scores and Announcements Grid */}
@@ -636,36 +684,46 @@ export default function ParentDashboard() {
             <span className="text-xs text-navy/60">Season 2026</span>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm text-navy">
-              <thead className="bg-[#f2f5fa] border-b border-navy/15 text-xs font-bold uppercase tracking-wider text-navy/70">
-                <tr>
-                  <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3">Match</th>
-                  <th className="py-2.5 px-3">Against</th>
-                  <th className="py-2.5 px-3">Batting</th>
-                  <th className="py-2.5 px-3">Bowling</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-navy/10">
-                {MOCK_MATCHES.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-3 text-xs text-navy/70">{m.matchDate}</td>
-                    <td className="py-3 px-3">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-navy text-gold">
-                        {m.level}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 font-semibold text-xs">{m.opponent}</td>
-                    <td className="py-3 px-3 font-mono font-bold text-xs">{m.battingScore}</td>
-                    <td className="py-3 px-3 font-mono font-bold text-xs text-emerald-800">
-                      {m.bowlingFigures}
-                    </td>
+          {MOCK_MATCHES.length > 0 ? (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm text-navy">
+                <thead className="bg-[#f2f5fa] border-b border-navy/15 text-xs font-bold uppercase tracking-wider text-navy/70">
+                  <tr>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Match</th>
+                    <th className="py-2.5 px-3">Against</th>
+                    <th className="py-2.5 px-3">Batting</th>
+                    <th className="py-2.5 px-3">Bowling</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-navy/10">
+                  {MOCK_MATCHES.map((m) => (
+                    <tr key={m.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-3 text-xs text-navy/70">{m.matchDate}</td>
+                      <td className="py-3 px-3">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-navy text-gold">
+                          {m.level}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-xs">{m.opponent}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-xs">{m.battingScore}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-xs text-emerald-800">
+                        {m.bowlingFigures}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="mt-6 py-10 text-center text-navy/60 bg-[#f8fafc] rounded-lg border border-dashed border-navy/20">
+              <Trophy className="w-8 h-8 mx-auto text-navy/40 mb-2" />
+              <p className="font-semibold text-sm">No match scorecards recorded yet</p>
+              <p className="text-xs text-navy/50 mt-1">
+                Tournament and inter-academy fixture statistics will be published here by coaches.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Notices & Announcements */}
@@ -679,23 +737,33 @@ export default function ParentDashboard() {
             </div>
           </div>
 
-          <div className="mt-4 space-y-4">
-            {announcementsList.map((ann) => (
-              <div
-                key={ann.id}
-                className="p-3.5 rounded-lg bg-[#f2f5fa] border border-navy/10 space-y-1"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-navy text-gold">
-                    {ann.category}
-                  </span>
-                  <span className="text-[11px] text-navy/50">{ann.date}</span>
+          {announcementsList.length > 0 ? (
+            <div className="mt-4 space-y-4">
+              {announcementsList.map((ann) => (
+                <div
+                  key={ann.id}
+                  className="p-3.5 rounded-lg bg-[#f2f5fa] border border-navy/10 space-y-1"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-navy text-gold">
+                      {ann.category}
+                    </span>
+                    <span className="text-[11px] text-navy/50">{ann.date}</span>
+                  </div>
+                  <h3 className="font-bold text-sm text-navy">{ann.title}</h3>
+                  <p className="text-xs text-navy/75 leading-relaxed">{ann.content}</p>
                 </div>
-                <h3 className="font-bold text-sm text-navy">{ann.title}</h3>
-                <p className="text-xs text-navy/75 leading-relaxed">{ann.content}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-6 py-10 text-center text-navy/60 bg-[#f8fafc] rounded-lg border border-dashed border-navy/20">
+              <Bell className="w-8 h-8 mx-auto text-navy/40 mb-2" />
+              <p className="font-semibold text-sm">No active announcements</p>
+              <p className="text-xs text-navy/50 mt-1">
+                Camp circulars, holiday notices, and schedule updates will be posted here.
+              </p>
+            </div>
+          )}
         </section>
       </div>
 
@@ -705,10 +773,10 @@ export default function ParentDashboard() {
         onClose={() => setShowPaymentModal(false)}
         player={currentPlayer}
         fee={{
-          id: novemberFee.id,
-          monthYear: novemberFee.monthYear,
-          amount: novemberFee.amount,
-          dueDate: novemberFee.dueDate,
+          id: currentFee.id,
+          monthYear: currentFee.monthYear,
+          amount: currentFee.amount,
+          dueDate: currentFee.dueDate,
         }}
         onPaymentSuccess={handlePaymentSuccess}
       />

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
 
 const WHATSAPP = "917709705181";
-const BATCHES = ["U14", "U16", "U19", "U23", "Open", "Not sure yet"];
+const BATCHES = ["U12", "U14", "U16", "U19", "U23", "Open", "Not sure yet"];
 
 const field =
   "mt-1 w-full rounded-md border-2 border-navy/20 bg-white px-3 py-2.5 text-navy focus:border-navy focus:outline-none";
@@ -47,7 +47,7 @@ export default function EnquiryForm() {
         Player name *
         <input
           required
-          placeholder="e.g. Atharva Joshi"
+          placeholder="e.g. Candidate Full Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           className={field}
@@ -59,7 +59,7 @@ export default function EnquiryForm() {
         <input
           required
           type="tel"
-          placeholder="e.g. +91 98220 12345"
+          placeholder="10-digit mobile number"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           className={field}

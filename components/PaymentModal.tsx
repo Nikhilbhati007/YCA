@@ -127,8 +127,8 @@ export default function PaymentModal({
           });
         },
         prefill: {
-          name: player.parentName,
-          contact: player.parentPhone.replace(/[^0-9]/g, ""),
+          name: player.parentName || player.fullName,
+          contact: player.parentPhone ? player.parentPhone.replace(/[^0-9]/g, "") : "",
           email: "parent@ycapace.com",
         },
         theme: {

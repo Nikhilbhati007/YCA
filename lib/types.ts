@@ -10,7 +10,7 @@ export interface Profile {
 
 export interface Batch {
   id: string;
-  name: "U14" | "U16" | "U19" | "U23" | "Open";
+  name: "U12" | "U14" | "U16" | "U19" | "U23" | "Open";
   sessionTime: "Morning" | "Evening" | "Under lights";
   timeSlot: string;
   playerCount: number;
@@ -26,9 +26,9 @@ export interface Player {
   gender: "Boy" | "Girl";
   batchId: string;
   batchName: string;
-  parentId: string;
-  parentName: string;
-  parentPhone: string;
+  parentId?: string;
+  parentName?: string;
+  parentPhone?: string;
   primaryRole: "Fast Bowler" | "Batsman" | "All-rounder" | "Wicketkeeper" | "Spinner";
   bowlingStyle?: string;
   battingStyle?: string;
@@ -76,7 +76,8 @@ export interface VideoAnalysis {
   coachName: string;
   date: string;
   videoUrl: string;
-  thumbnailPlaceholderColor: string;
+  thumbnailUrl?: string;
+  thumbnailPlaceholderColor?: string;
   skillCategory: "Run-up & Approach" | "Release Point" | "Seam & Wrist Position" | "Follow-through" | "Pitch Map Accuracy";
   bowlingSpeedKmph?: number;
   feedback: string;
