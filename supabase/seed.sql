@@ -49,3 +49,10 @@ values
   ('a1000000-0000-0000-0000-000000000031', 'YCA-0071', 'Arnav Tiwari', '2011-08-14', 'Boy', 'b1000000-0000-0000-0000-000000000003', 'Batsman', 'Right-arm Medium', 'Right-hand bat', 'active')
 on conflict (id) do nothing;
 
+-- 3. Initial November 2026 Fee Dues for Enrolled Players (Rs. 2,500 due 5th Nov)
+insert into public.fees (player_id, month_year, amount, due_date, status)
+select id, 'November 2026', 2500.00, '2026-11-05', 'pending'
+from public.players
+on conflict do nothing;
+
+
