@@ -82,39 +82,31 @@ export default function DashboardShell({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Academy Portal Switcher */}
-            <div className="hidden md:flex items-center bg-white/10 rounded-lg p-1 text-xs">
-              <Link
-                href="/admin"
-                className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
-                  pathname.startsWith("/admin")
-                    ? "bg-[#f5b700] text-[#0a1a33] font-bold"
-                    : "text-white/80 hover:text-white"
-                }`}
-              >
-                <Shield className="w-3 h-3" /> Admin
-              </Link>
-              <Link
-                href="/coach"
-                className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
-                  pathname.startsWith("/coach")
-                    ? "bg-[#f5b700] text-[#0a1a33] font-bold"
-                    : "text-white/80 hover:text-white"
-                }`}
-              >
-                <Users className="w-3 h-3" /> Coach
-              </Link>
-              <Link
-                href="/parent"
-                className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
-                  pathname.startsWith("/parent")
-                    ? "bg-[#f5b700] text-[#0a1a33] font-bold"
-                    : "text-white/80 hover:text-white"
-                }`}
-              >
-                <Trophy className="w-3 h-3" /> Parent
-              </Link>
-            </div>
+            {/* Academy Portal Switcher - Only visible to Academy Staff (Admin / Coach), NEVER to Parents */}
+            {role !== "Parent" && loggedUser?.role !== "parent" && (
+              <div className="hidden md:flex items-center bg-white/10 rounded-lg p-1 text-xs">
+                <Link
+                  href="/admin"
+                  className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
+                    pathname.startsWith("/admin")
+                      ? "bg-[#f5b700] text-[#0a1a33] font-bold"
+                      : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  <Shield className="w-3 h-3" /> Admin
+                </Link>
+                <Link
+                  href="/coach"
+                  className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
+                    pathname.startsWith("/coach")
+                      ? "bg-[#f5b700] text-[#0a1a33] font-bold"
+                      : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  <Users className="w-3 h-3" /> Coach
+                </Link>
+              </div>
+            )}
 
             {loggedUser ? (
               <span className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/10 text-white/90 text-xs font-medium">

@@ -47,6 +47,21 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBatchFilter, setSelectedBatchFilter] = useState("all");
 
+  // Role Guard: Parents cannot access Admin portal
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("yca_logged_user");
+      if (stored) {
+        try {
+          const u = JSON.parse(stored);
+          if (u.role === "parent") {
+            window.location.href = "/parent";
+          }
+        } catch {}
+      }
+    }
+  }, []);
+
   // New Student Modal / Form state
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState("");

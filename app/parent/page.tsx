@@ -47,15 +47,30 @@ export default function ParentDashboard() {
   const [videoList, setVideoList] = useState<VideoAnalysis[]>(MOCK_VIDEO_ANALYSIS);
   const [announcementsList, setAnnouncementsList] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
 
-  // Check for active logged-in student from query param or localStorage
+  // Strictly lock to the active logged-in student session
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const storedId = localStorage.getItem("yca_active_player");
+      const storedUser = localStorage.getItem("yca_logged_user");
+
+      // If user logged in as parent, strictly enforce their own player ID
+      let isParentUser = false;
+      if (storedUser) {
+        try {
+          const u = JSON.parse(storedUser);
+          if (u.role === "parent") isParentUser = true;
+        } catch {}
+      }
+
       const params = new URLSearchParams(window.location.search);
       const queryId = params.get("playerId");
-      const storedId = localStorage.getItem("yca_active_player");
-      const targetId = queryId || storedId;
+      const targetId = isParentUser ? (storedId || queryId) : (queryId || storedId);
+
       if (targetId && playersList.some((p) => p.id === targetId)) {
         setSelectedPlayerId(targetId);
+      } else if (!storedId && !queryId) {
+        // No active session found, redirect to login
+        window.location.href = "/login";
       }
     }
   }, [playersList]);
@@ -338,35 +353,15 @@ export default function ParentDashboard() {
           </p>
         </div>
 
-        {/* Student Selector */}
-        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-navy/15 shadow-sm">
-          <label htmlFor="student-selector" className="text-xs font-bold uppercase text-navy/60 px-2 whitespace-nowrap">
-            Select Player:
-          </label>
-          <select
-            id="student-selector"
-            value={selectedPlayerId}
-            onChange={(e) => {
-              setSelectedPlayerId(e.target.value);
-              if (typeof window !== "undefined") {
-                localStorage.setItem("yca_active_player", e.target.value);
-                const p = playersList.find((item) => item.id === e.target.value);
-                if (p) {
-                  localStorage.setItem(
-                    "yca_logged_user",
-                    JSON.stringify({ name: p.fullName, code: p.playerCode, role: "parent" })
-                  );
-                }
-              }
-            }}
-            className="rounded-lg border border-navy/20 bg-slate-50 px-3 py-1.5 text-xs font-bold text-navy focus:outline-none focus:border-navy"
-          >
-            {playersList.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.fullName} ({p.batchName} · {p.playerCode})
-              </option>
-            ))}
-          </select>
+        {/* Verified Student Badge (Locked to logged-in student) */}
+        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-navy/15 shadow-sm">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-navy/50 block">Active Student</span>
+            <span className="text-xs font-bold text-navy font-mono">
+              {currentPlayer.fullName} · {currentPlayer.batchName} ({currentPlayer.playerCode})
+            </span>
+          </div>
         </div>
       </div>
 

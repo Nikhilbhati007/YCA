@@ -10,3 +10,4 @@ export default function robots(): MetadataRoute.Robots {
     sitemap: 'https://yca-two.vercel.app/sitemap.xml',
   };
 }
+

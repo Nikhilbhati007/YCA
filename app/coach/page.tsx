@@ -63,6 +63,21 @@ export default function CoachDashboard() {
   );
   const [savedAttendanceMsg, setSavedAttendanceMsg] = useState<string | null>(null);
 
+  // Role Guard: Parents cannot access Coach portal
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("yca_logged_user");
+      if (stored) {
+        try {
+          const u = JSON.parse(stored);
+          if (u.role === "parent") {
+            window.location.href = "/parent";
+          }
+        } catch {}
+      }
+    }
+  }, []);
+
   // Check Supabase connection and fetch live players & batches
   useEffect(() => {
     const configured = isSupabaseConfigured();
