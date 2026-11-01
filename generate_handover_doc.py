@@ -41,7 +41,7 @@ def create_document():
         fp.runs[0].font.color.rgb = RGBColor(120, 120, 120)
 
     # Palette
-    NAVY = RGBColor(15, 34, 64)       # Primary dark navy
+    NAVY = RGBColor(15, 34, 64)       # Primary dark navy (#0F2240)
     GOLD = RGBColor(217, 119, 6)      # Accent amber/gold
     SLATE = RGBColor(71, 85, 105)     # Subtitle gray
     TEXT_COLOR = RGBColor(30, 41, 59) # Body dark slate
@@ -413,14 +413,92 @@ def create_document():
 
     doc.add_page_break()
 
-    # --- SECTION 6: QUICK CHEAT SHEET & SUPPORT ---
-    h6 = doc.add_heading("6. Quick Cheat Sheet & Support Contacts", level=1)
-    h6.runs[0].font.color.rgb = NAVY
+    # --- SECTION 6: DIGITAL ASSETS OWNERSHIP & CLOUD RECORDS (NEW!) ---
+    h6_tech = doc.add_heading("6. Academy Digital Assets Ownership & Permanent Cloud Records", level=1)
+    h6_tech.runs[0].font.color.rgb = NAVY
     
-    summary_table = doc.add_table(rows=7, cols=2)
+    p = doc.add_paragraph(
+        "As the founder and owner of Yadav Cricket Academy, you hold 100% intellectual property ownership of your website, "
+        "database, code, and student records. Below are the permanent cloud accounts and links where your platform lives:"
+    )
+    p.style.font.size = Pt(10.5)
+
+    tech_table = doc.add_table(rows=4, cols=3)
+    tech_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    tech_table.autofit = False
+    
+    t_headers = ["Asset Name", "Cloud Link / Location", "Plain-English Explanation"]
+    for i, h in enumerate(t_headers):
+        cell = tech_table.rows[0].cells[i]
+        set_cell_background(cell, "0F2240")
+        set_cell_margins(cell, 140, 140, 180, 180)
+        p = cell.paragraphs[0]
+        r = p.add_run(h)
+        r.font.bold = True
+        r.font.color.rgb = RGBColor(255, 255, 255)
+        r.font.size = Pt(10)
+
+    tech_rows = [
+        (
+            "GitHub Source Code Repository",
+            "https://github.com/Nikhilbhati007/YCA.git",
+            "The complete digital master blueprint and original code of your website, design files, and database scripts. You own the full rights to this software."
+        ),
+        (
+            "Supabase Cloud Database",
+            "https://supabase.com/dashboard/project/xhvyhxkufctsmzxssmqa",
+            "Your academy's cloud database (Project: YCA, ID: xhvyhxkufctsmzxssmqa). All 31 student records, attendance logs, and fee ledgers are securely stored here with automatic daily backups."
+        ),
+        (
+            "Vercel Cloud Hosting Engine",
+            "https://vercel.com/nikhilbhati007/yca\n(Live: https://yca-two.vercel.app)",
+            "The world-class high-speed cloud hosting server that keeps your academy website running 24 hours a day, 365 days a year with automatic bank-grade SSL security."
+        )
+    ]
+    for row_idx, data in enumerate(tech_rows):
+        row = tech_table.rows[row_idx + 1]
+        bg = "FFFFFF" if row_idx % 2 == 0 else "F8FAFC"
+        for col_idx, text in enumerate(data):
+            cell = row.cells[col_idx]
+            set_cell_background(cell, bg)
+            set_cell_margins(cell, 120, 120, 160, 160)
+            p = cell.paragraphs[0]
+            r = p.add_run(text)
+            r.font.size = Pt(9.5)
+            if col_idx == 0:
+                r.font.bold = True
+                r.font.color.rgb = NAVY
+            elif col_idx == 1:
+                r.font.color.rgb = RGBColor(37, 99, 235)
+
+    doc.add_paragraph()
+
+    # Callout: Custom Domain Option
+    domain_box = doc.add_table(rows=1, cols=1)
+    domain_box.alignment = WD_TABLE_ALIGNMENT.CENTER
+    db_cell = domain_box.rows[0].cells[0]
+    set_cell_background(db_cell, "ECFDF5") # Soft green
+    set_cell_margins(db_cell, 140, 140, 180, 180)
+    dbp = db_cell.paragraphs[0]
+    r = dbp.add_run("🌐 Connecting a Custom Academy Domain (e.g. www.ycapace.com):\n")
+    r.bold = True
+    r.font.color.rgb = RGBColor(6, 95, 70)
+    dbp.add_run(
+        "Right now, your platform is live at https://yca-two.vercel.app. If you ever purchase a custom domain like "
+        "ycapace.com or yadavcricketacademy.com (from GoDaddy/Hostinger for ~Rs. 499/year), it can be connected in 5 minutes "
+        "without disrupting your website or database."
+    )
+
+    doc.add_page_break()
+
+    # --- SECTION 7: QUICK CHEAT SHEET & SUPPORT ---
+    h7 = doc.add_heading("7. Master Quick Cheat Sheet & Contact Card", level=1)
+    h7.runs[0].font.color.rgb = NAVY
+    
+    summary_table = doc.add_table(rows=9, cols=2)
     summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     
-    s_headers = ["Item", "Details"]
+    s_headers = ["Item / Resource", "Website Link & Quick Login Details"]
     for i, h in enumerate(s_headers):
         cell = summary_table.rows[0].cells[i]
         set_cell_background(cell, "0F2240")
@@ -432,11 +510,13 @@ def create_document():
         
     s_rows = [
         ("Live Academy Website", "https://yca-two.vercel.app"),
-        ("Admin Portal Login", "https://yca-two.vercel.app/admin (admin@ycapace.com / password123)"),
-        ("Coach Portal Login", "https://yca-two.vercel.app/coach (coach@ycapace.com / password123)"),
-        ("Parent Portal Login", "https://yca-two.vercel.app/login (Student Name + DOB)"),
-        ("Fee UPI Payment ID", "7709705181@upi (Jay Singh Yadav)"),
-        ("Ground Location", "Mahajanwadi, behind Dahi Handi Ground, Hingna Road, Nagpur")
+        ("Parent / Student Login", "https://yca-two.vercel.app/login (Student Name + Date of Birth)"),
+        ("Coach Field Portal", "https://yca-two.vercel.app/coach (coach@ycapace.com / password123)"),
+        ("Admin Office Portal", "https://yca-two.vercel.app/admin (admin@ycapace.com / password123)"),
+        ("GitHub Source Code", "https://github.com/Nikhilbhati007/YCA.git"),
+        ("Supabase Cloud Database", "https://supabase.com/dashboard/project/xhvyhxkufctsmzxssmqa"),
+        ("Vercel Hosting Dashboard", "https://vercel.com/nikhilbhati007/yca"),
+        ("Direct Academy UPI ID", "7709705181@upi (Head Coach Jay Singh Yadav)")
     ]
     for row_idx, data in enumerate(s_rows):
         row = summary_table.rows[row_idx + 1]
@@ -451,6 +531,8 @@ def create_document():
             if col_idx == 0:
                 r.font.bold = True
                 r.font.color.rgb = NAVY
+            elif "http" in text:
+                r.font.color.rgb = RGBColor(37, 99, 235)
 
     doc.add_paragraph()
     doc.add_paragraph()
@@ -461,17 +543,17 @@ def create_document():
     set_cell_background(fc_cell, "E0F2FE") # Soft sky blue
     set_cell_margins(fc_cell, 180, 180, 240, 240)
     fcp = fc_cell.paragraphs[0]
-    r = fcp.add_run("✨ Platform Built & Maintained by Nikhil Bhati\n")
+    r = fcp.add_run("✨ Platform Architected & Developed by Nikhil Bhati\n")
     r.bold = True
     r.font.color.rgb = NAVY
     fcp.add_run(
-        "For any technical updates, adding custom domain names (e.g. ycapace.com), or expanding platform features, "
-        "your development team is always here to support Yadav Cricket Academy & Pace Foundation."
+        "For any technical updates, domain linking, or expanding platform features in the future, "
+        "your development team is always available to assist and support Yadav Cricket Academy & Pace Foundation."
     )
     
     output_path = r"c:\Users\Nikhi\Downloads\Pace Academy\YCA_Pace\YCA_Pace_Academy_Owner_Guide.docx"
     doc.save(output_path)
-    print("SUCCESS: Word document created at:", output_path)
+    print("SUCCESS: Updated Word document created at:", output_path)
 
 if __name__ == "__main__":
     create_document()
